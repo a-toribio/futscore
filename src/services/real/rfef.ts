@@ -19,6 +19,7 @@ import type {
   TeamVenue,
 } from '@/types'
 import { createDefaultMatchDetail, deriveShortName } from './createRealProvider'
+import { fetchRfefExtraDetail } from './futbolmeApi'
 import { RFEF_CLUB_INDEX } from './rfefClubIndex'
 import { fetchClubDescription } from './wikipedia'
 
@@ -154,6 +155,8 @@ interface ParsedRfefMatchExtra {
   venue?: { name: string; city?: string }
   round?: string
   events: MatchEvent[]
+  /** Id de evento de futbolme (attr-id-evento) para pedir estadísticas y tarjetas. */
+  betsapiId?: string
 }
 
 export interface ParsedFutbolmeTournament {
@@ -471,11 +474,14 @@ export function parseMatchBlocks(
     const jornada = jornadaFallback ?? (inBlockRound || undefined)
     const roundLabel = jornada ? `Jornada ${jornada} · ${group.name}` : group.name
 
+    const betsapiId = /attr-id-evento="(\d{3,})"/.exec(block)?.[1]
+
     const extra: ParsedRfefMatchExtra = {
       match,
       venue,
       round: roundLabel,
       events,
+      betsapiId,
     }
 
     rfefMatchDetailsStore.set(matchId, extra)
@@ -703,22 +709,39 @@ export async function fetchRfefLeagueMatches(
 /**
  * Construye el detalle de un partido RFEF (goles, goleadores, estadio, localidad y jornada).
  */
-export function getRfefMatchDetail(match: Match): MatchDetail {
+export async function getRfefMatchDetail(match: Match, fetchFn: FetchFn = fetch): Promise<MatchDetail> {
   const stored = rfefMatchDetailsStore.get(match.id)
   const base = createDefaultMatchDetail(match)
   if (!stored) return base
 
-  return {
+  const goals = stored.events
+  const detail: MatchDetail = {
     ...base,
     match,
-    events: stored.events,
+    events: goals,
+    info: { venue: stored.venue, round: stored.round },
+  }
+  if (!stored.betsapiId) return detail
+
+  // Estadísticas, tarjetas, estadio y alineaciones (si existen) desde el API de futbolme.
+  const extra = await fetchRfefExtraDetail(stored.betsapiId, match, fetchFn)
+  if (!extra) return detail
+
+  return {
+    ...detail,
+    events: [...goals, ...extra.cards].sort(
+      (a, b) => minuteToSortValue(a.minute) - minuteToSortValue(b.minute),
+    ),
+    stats: extra.stats,
+    lineups: extra.lineups ?? detail.lineups,
     info: {
-      venue: stored.venue,
-      round: stored.round,
+      ...detail.info,
+      venue: stored.venue
+        ? { ...extra.venue, ...stored.venue, capacity: extra.venue?.capacity }
+        : extra.venue,
     },
   }
 }
-
 
 
 // ── Ficha de club RFEF (datos, plantilla y calendario desde futbolme.com) ──

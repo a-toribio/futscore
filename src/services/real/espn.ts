@@ -1011,7 +1011,7 @@ export function createEspnProvider({
 
     async fetchMatchDetail(match: Match): Promise<MatchDetail> {
       if (isRfefLeague(match.leagueId) || match.id.startsWith('rfef-')) {
-        return getRfefMatchDetail(match)
+        return getRfefMatchDetail(match, fetchFn)
       }
       const rawId = match.id.replace(/^espn-/, '')
       const entry = leagueCatalog.find((l) => l.id === match.leagueId)
