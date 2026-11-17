@@ -31,6 +31,10 @@ jobs:
         run: npm ci
 
       - name: Build web app
+        env:
+          VITE_APP_VERSION: 1.0.${{ github.run_number }}
+          VITE_BUILD_SHA: ${{ github.sha }}
+          VITE_BUILD_TIME: ${{ github.event.head_commit.timestamp || '' }}
         run: npm run build
 
       - name: Sync Capacitor Android
@@ -40,7 +44,7 @@ jobs:
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleDebug --no-daemon -PversionCode=$((100 + ${{ github.run_number }})) -PversionName=1.0.${{ github.run_number }}
 
       - name: Prepare FutScore.apk
         run: cp android/app/build/outputs/apk/debug/app-debug.apk FutScore.apk
@@ -55,8 +59,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          VERSION="1.0.${{ github.run_number }}"
+          TITLE="FutScore Android APK (v${VERSION})"
+          NOTES="Aplicación móvil Android de FutScore lista para instalar (.apk). Versión: v${VERSION} (commit:${{ github.sha }})"
           if gh release view v1.0.0 >/dev/null 2>&1; then
             gh release upload v1.0.0 FutScore.apk --clobber
+            gh release edit v1.0.0 --title "$TITLE" --notes "$NOTES"
           else
-            gh release create v1.0.0 FutScore.apk --title "FutScore Android APK (v1.0.0)" --notes "Aplicación móvil Android de FutScore lista para instalar (.apk)."
+            gh release create v1.0.0 FutScore.apk --title "$TITLE" --notes "$NOTES"
           fi

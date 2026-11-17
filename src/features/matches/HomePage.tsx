@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react'
-import { useAppNavigation } from '@/features/navigation/navigationContext'
 import { useFavoritesStore } from '@/features/favorites/favoritesStore'
+import { useAppNavigation } from '@/features/navigation/navigationContext'
 import { toDateKey } from '@/lib/date'
-import { sortByFavorites } from '@/lib/favorites'
+import { splitFavoriteMatches } from '@/lib/favorites'
 import type { LeagueMatches } from '@/types'
 import { DayTabs, type MatchView } from './components/DayTabs'
 import { LeagueSection } from './components/LeagueSection'
+import { MatchCard } from './components/MatchCard'
 import { useMatchesByDate } from './hooks/useMatchesByDate'
 
 function onlyLive(groups: LeagueMatches[]): LeagueMatches[] {
@@ -38,9 +39,9 @@ export function HomePage() {
   const liveCount = useMemo(() => liveGroups.reduce((n, g) => n + g.matches.length, 0), [liveGroups])
   const favTeamIds = useFavoritesStore((s) => s.teamIds)
   const favLeagueIds = useFavoritesStore((s) => s.leagueIds)
-  const groups = useMemo(
+  const { favoriteTeamMatches, groups } = useMemo(
     () =>
-      sortByFavorites(view === 'live' ? liveGroups : (data ?? []), {
+      splitFavoriteMatches(view === 'live' ? liveGroups : (data ?? []), {
         teamIds: favTeamIds,
         leagueIds: favLeagueIds,
       }),
@@ -86,7 +87,7 @@ export function HomePage() {
         </div>
       )}
 
-      {!isPending && !isError && groups.length === 0 && (
+      {!isPending && !isError && groups.length === 0 && favoriteTeamMatches.length === 0 && (
         <div className="flex flex-col items-center justify-center rounded-xl border border-border bg-card p-8 text-center text-sm text-fg-muted">
           <p className="text-base font-semibold text-fg">
             {view === 'live' ? 'No hay partidos en directo en este momento' : 'No hay partidos programados para esta fecha'}
@@ -110,16 +111,30 @@ export function HomePage() {
         </div>
       )}
 
-      <div className="flex flex-col gap-3">
-        {groups.map((group) => (
-          <LeagueSection
-            key={group.league.id}
-            {...group}
-            onSelectMatch={openMatch}
-            onOpenStandings={(leagueId) => openLeague(leagueId)}
-          />
-        ))}
-      </div>
+      {favoriteTeamMatches.length > 0 && (
+        <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
+          {favoriteTeamMatches.map((match) => (
+            <MatchCard
+              key={match.id}
+              match={match}
+              onClick={() => openMatch(match)}
+            />
+          ))}
+        </ul>
+      )}
+
+      {groups.length > 0 && (
+        <div className="flex flex-col gap-3">
+          {groups.map((group) => (
+            <LeagueSection
+              key={group.league.id}
+              {...group}
+              onSelectMatch={openMatch}
+              onOpenStandings={(leagueId) => openLeague(leagueId)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   )
 }

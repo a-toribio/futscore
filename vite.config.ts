@@ -47,6 +47,11 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react(), tailwindcss()],
+    define: {
+      __APP_VERSION__: JSON.stringify(env.VITE_APP_VERSION || '1.0.0'),
+      __APP_BUILD_SHA__: JSON.stringify(env.VITE_BUILD_SHA || ''),
+      __APP_BUILD_TIME__: JSON.stringify(env.VITE_BUILD_TIME || new Date().toISOString()),
+    },
     resolve: {
       alias: {
         '@': path.resolve(import.meta.dirname, 'src'),

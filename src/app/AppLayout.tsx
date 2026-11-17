@@ -1,5 +1,6 @@
 import { Outlet } from 'react-router-dom'
 import { DataSourceBanner, DataSourceFooter } from '@/components/DataSourceBanner'
+import { UpdateModal } from '@/components/UpdateModal'
 import { LiveDot } from '@/components/ui/LiveDot'
 import { SearchIcon } from '@/components/ui/SearchIcon'
 import { NavigationProvider } from '@/features/navigation/NavigationProvider'
@@ -47,6 +48,7 @@ export function AppLayout() {
         </main>
         <DataSourceFooter />
       </div>
+      <UpdateModal />
     </NavigationProvider>
   )
 }
