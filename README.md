@@ -37,3 +37,17 @@ Aplicación web en español para seguir partidos de fútbol en directo, alineaci
    npm run lint    # Comprobar reglas de linter (Oxlint)
    npm run build   # Compilar para producción (TypeScript + Vite)
    ```
+
+---
+
+## Aplicación Móvil Android (.apk)
+
+El proyecto incluye configuración nativa de **Capacitor** para Android en [`android/`](android/) y compilación automática mediante GitHub Actions ([`.github/workflows/build-apk.yml`](.github/workflows/build-apk.yml)).
+
+- **Descargar el APK compilado:** Disponible en la pestaña [Releases](https://github.com/a-toribio/futscore/releases) de GitHub (`FutScore.apk`).
+- **Sincronizar cambios web con Android en local:**
+  ```bash
+  npm run cap:sync
+  npm run cap:open
+  ```
+

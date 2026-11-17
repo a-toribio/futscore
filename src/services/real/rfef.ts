@@ -494,8 +494,10 @@ async function fetchFutbolmeHtml(
   fetchFn: FetchFn = fetch,
   marker = 'cajaPartido',
 ): Promise<string> {
-  const urls =
-    typeof window !== 'undefined'
+  const isNative = typeof window !== 'undefined' && 'Capacitor' in window
+  const urls = isNative
+    ? [`${FUTBOLME_PUBLIC_BASE}${path}`, `${FUTBOLME_PROXY_BASE}${path}`]
+    : typeof window !== 'undefined'
       ? [`${FUTBOLME_PROXY_BASE}${path}`, `${FUTBOLME_PUBLIC_BASE}${path}`]
       : [`${FUTBOLME_PUBLIC_BASE}${path}`]
 

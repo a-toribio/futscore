@@ -192,8 +192,13 @@ export async function loadRealSpanishTvSchedule(
 
   schedulePromise = (async () => {
     try {
-      const urls =
-        typeof window !== 'undefined'
+      const isNative = typeof window !== 'undefined' && 'Capacitor' in window
+      const urls = isNative
+        ? [
+            'https://www.futbolenlatv.es/deporte/futbol',
+            'https://www.futbolenlatv.es/competicion/la-liga',
+          ]
+        : typeof window !== 'undefined'
           ? ['/api/futbolenlatv/deporte/futbol', '/api/futbolenlatv/competicion/la-liga']
           : ['https://www.futbolenlatv.es/deporte/futbol']
 

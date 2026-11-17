@@ -1,0 +1,13 @@
+{
+  "appId": "com.futscore.app",
+  "appName": "FutScore",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    }
+  }
+}
