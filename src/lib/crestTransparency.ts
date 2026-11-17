@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { toFutbolmeUrl } from './runtime'
 
 /** Caché global de escudos procesados con fondo transparente */
 const transparentCache = new Map<string, string>()
@@ -15,9 +16,11 @@ export function normalizeCrestUrl(url?: string): string | undefined {
   if (!url) return undefined
   if (
     typeof window !== 'undefined' &&
-    (url.startsWith('https://futbolme.com') || url.startsWith('http://futbolme.com'))
+    (url.startsWith('https://futbolme.com') ||
+      url.startsWith('http://futbolme.com') ||
+      url.startsWith('/api/futbolme'))
   ) {
-    return url.replace(/^https?:\/\/futbolme\.com/, '/api/futbolme')
+    return toFutbolmeUrl(url)
   }
   return url
 }

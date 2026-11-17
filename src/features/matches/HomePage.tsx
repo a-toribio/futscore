@@ -8,14 +8,6 @@ import { DayTabs, type MatchView } from './components/DayTabs'
 import { LeagueSection } from './components/LeagueSection'
 import { useMatchesByDate } from './hooks/useMatchesByDate'
 
-const NATIONAL_COMPETITIONS = [
-  { id: 'worldcup', label: 'Mundial FIFA', flag: '🌍' },
-  { id: 'euro', label: 'Eurocopa', flag: '🇪🇺' },
-  { id: 'nations', label: 'Nations League', flag: '🇪🇺' },
-  { id: 'copaamerica', label: 'Copa América', flag: '🌎' },
-  { id: 'worldq_uefa', label: 'Clasif. UEFA', flag: '🌍' },
-]
-
 function onlyLive(groups: LeagueMatches[]): LeagueMatches[] {
   return groups
     .map((g) => ({ ...g, matches: g.matches.filter((m) => m.status === 'live') }))
@@ -68,18 +60,6 @@ export function HomePage() {
         <span className="shrink-0 rounded-md bg-sky-500/10 border border-sky-500/25 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-sky-400">
           Selecciones
         </span>
-        {NATIONAL_COMPETITIONS.map((c) => (
-          <button
-            key={c.id}
-            type="button"
-            onClick={() => openLeague(c.id)}
-            className="flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-xs font-medium text-fg-muted transition-colors hover:border-accent/50 hover:text-accent cursor-pointer"
-          >
-            <span aria-hidden="true">{c.flag}</span>
-            <span>{c.label}</span>
-          </button>
-        ))}
-        <span aria-hidden="true" className="mx-0.5 h-4 w-px shrink-0 bg-border" />
         {FEATURED_NATIONAL_TEAMS.map((nt) => (
           <button
             key={nt.team.id}

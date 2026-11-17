@@ -4,13 +4,12 @@
  * https://futbolme.com/static/img/club/escudo{id}.png
  */
 
+import { toFutbolmeUrl } from './runtime'
+
 export const FUTBOLME_CREST_BASE = 'https://futbolme.com/static/img/club'
 
 export function buildFutbolmeCrestUrl(shieldId: number | string): string {
-  if (typeof window !== 'undefined') {
-    return `/api/futbolme/static/img/club/escudo${shieldId}.png`
-  }
-  return `${FUTBOLME_CREST_BASE}/escudo${shieldId}.png`
+  return toFutbolmeUrl(`${FUTBOLME_CREST_BASE}/escudo${shieldId}.png`)
 }
 
 export const SPANISH_CLUB_CREST_IDS: Record<string, number> = {
@@ -602,7 +601,7 @@ export function registerSpanishTeamCrest(name: string, logoUrl?: string): void {
 export function resolveSpanishTeamCrest(name: string, existingLogoUrl?: string): string | undefined {
   if (existingLogoUrl && existingLogoUrl.trim().length > 0) {
     if (typeof window !== 'undefined' && existingLogoUrl.includes('futbolme.com/')) {
-      return existingLogoUrl.replace(/^https?:\/\/futbolme\.com/, '/api/futbolme')
+      return toFutbolmeUrl(existingLogoUrl)
     }
     return existingLogoUrl
   }
