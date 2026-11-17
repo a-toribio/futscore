@@ -1,8 +1,6 @@
 import { useMemo, useState } from 'react'
-import { TeamCrest } from '@/components/ui/TeamCrest'
 import { useAppNavigation } from '@/features/navigation/navigationContext'
 import { toDateKey } from '@/lib/date'
-import { FEATURED_NATIONAL_TEAMS } from '@/lib/nationalTeams'
 import type { LeagueMatches } from '@/types'
 import { DayTabs, type MatchView } from './components/DayTabs'
 import { LeagueSection } from './components/LeagueSection'
@@ -27,7 +25,7 @@ function getRecentMatchdayDate(todayIso: string): string {
 export function HomePage() {
   const [today] = useState(() => toDateKey(new Date()))
   const [view, setView] = useState<MatchView>(today)
-  const { openMatch, openLeague, openTeam } = useAppNavigation()
+  const { openMatch, openLeague } = useAppNavigation()
 
   // Los directos son siempre de hoy. React Query comparte la caché si ambas claves coinciden.
   const todayQuery = useMatchesByDate(today, today)
@@ -51,28 +49,6 @@ export function HomePage() {
         liveCount={liveCount}
         onChange={setView}
       />
-
-      {/* Acceso rápido a competiciones internacionales y selecciones nacionales */}
-      <section
-        aria-label="Selecciones nacionales y torneos internacionales"
-        className="flex items-center gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none]"
-      >
-        <span className="shrink-0 rounded-md bg-sky-500/10 border border-sky-500/25 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-sky-400">
-          Selecciones
-        </span>
-        {FEATURED_NATIONAL_TEAMS.map((nt) => (
-          <button
-            key={nt.team.id}
-            type="button"
-            onClick={() => openTeam(nt.team, nt.leagueId)}
-            title={`Ver selección de ${nt.team.name}`}
-            className="flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-surface px-2.5 py-1 text-xs font-semibold text-fg transition-colors hover:border-accent/50 hover:text-accent cursor-pointer"
-          >
-            <TeamCrest team={nt.team} className="size-4" />
-            <span>{nt.team.name}</span>
-          </button>
-        ))}
-      </section>
 
       {isPending && (
         <div className="flex flex-col gap-3" aria-busy="true">
