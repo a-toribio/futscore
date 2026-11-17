@@ -922,6 +922,39 @@ export interface EspnProviderOptions {
   now?: () => Date
 }
 
+/** Tiempo máximo que la portada espera a las ligas RFEF (scraping lento) antes de mostrar el resto. */
+const RFEF_GRACE_MS = 4000
+
+/**
+ * Espera a promise como mucho ms. Si tarda más, resuelve con [] para no bloquear la portada
+ * y avisa con onLate cuando termine, para que la UI recargue con esos datos.
+ */
+function withGrace(promise: Promise<Match[]>, ms: number, onLate?: () => void): Promise<Match[]> {
+  return new Promise((resolve, reject) => {
+    let settled = false
+    const timer = setTimeout(() => {
+      if (settled) return
+      settled = true
+      resolve([])
+      promise.then(() => onLate?.(), () => {})
+    }, ms)
+    promise.then(
+      (value) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        resolve(value)
+      },
+      (err) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        reject(err)
+      },
+    )
+  })
+}
+
 export const ESPN_PUBLIC_BASE = 'https://site.api.espn.com/apis/site/v2/sports/soccer'
 export const ESPN_PROXY_BASE = '/api/espn'
 
@@ -951,14 +984,14 @@ export function createEspnProvider({
     liveRefetchMs: 15_000,
     ttlMs: { today: 15_000, other: 5 * 60_000 },
     now,
-    async fetchMatches(date) {
+    async fetchMatches(date, onLate) {
       const compactDate = toCompactDate(date)
 
       const results = await Promise.allSettled(
         leagueCatalog.map(async ({ id, sources }) => {
           if (isRfefLeague(id)) {
             if (baseUrl) return []
-            return fetchRfefMatchesByDate(id, date, fetchFn)
+            return withGrace(fetchRfefMatchesByDate(id, date, fetchFn), RFEF_GRACE_MS, onLate)
           }
           const path = `/${sources.espn}/scoreboard?dates=${compactDate}`
           const data = await fetchWithProxyFallback<EspnScoreboard>(path)

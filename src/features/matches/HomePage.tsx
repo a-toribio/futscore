@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useAppNavigation } from '@/features/navigation/navigationContext'
+import { useFavoritesStore } from '@/features/favorites/favoritesStore'
 import { toDateKey } from '@/lib/date'
+import { sortByFavorites } from '@/lib/favorites'
 import type { LeagueMatches } from '@/types'
 import { DayTabs, type MatchView } from './components/DayTabs'
 import { LeagueSection } from './components/LeagueSection'
@@ -34,9 +36,15 @@ export function HomePage() {
 
   const liveGroups = useMemo(() => onlyLive(todayQuery.data ?? []), [todayQuery.data])
   const liveCount = useMemo(() => liveGroups.reduce((n, g) => n + g.matches.length, 0), [liveGroups])
+  const favTeamIds = useFavoritesStore((s) => s.teamIds)
+  const favLeagueIds = useFavoritesStore((s) => s.leagueIds)
   const groups = useMemo(
-    () => (view === 'live' ? liveGroups : (data ?? [])),
-    [view, liveGroups, data],
+    () =>
+      sortByFavorites(view === 'live' ? liveGroups : (data ?? []), {
+        teamIds: favTeamIds,
+        leagueIds: favLeagueIds,
+      }),
+    [view, liveGroups, data, favTeamIds, favLeagueIds],
   )
 
   const recentSunday = useMemo(() => getRecentMatchdayDate(today), [today])

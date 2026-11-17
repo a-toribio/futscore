@@ -1,11 +1,21 @@
-import { useCallback, useMemo, useState, type ReactNode } from 'react'
-import { StandingsModal } from '@/features/leagues/StandingsModal'
-import { MatchDetailModal } from '@/features/match-detail/components/MatchDetailModal'
-import { PlayerDetailModal } from '@/features/players/PlayerDetailModal'
-import { SearchModal } from '@/features/search/SearchModal'
-import { TeamModal } from '@/features/teams/TeamModal'
+import { lazy, Suspense, useCallback, useMemo, useState, type ReactNode } from 'react'
 import type { Match, Player, PlayerRef, SearchResult, SquadPlayer, Team, TeamRef } from '@/types'
 import { NavigationContext, type NavigationApi } from './navigationContext'
+
+// Las vistas superpuestas se cargan bajo demanda: la portada descarga menos JS al arrancar.
+const StandingsModal = lazy(() =>
+  import('@/features/leagues/StandingsModal').then((m) => ({ default: m.StandingsModal })),
+)
+const MatchDetailModal = lazy(() =>
+  import('@/features/match-detail/components/MatchDetailModal').then((m) => ({ default: m.MatchDetailModal })),
+)
+const PlayerDetailModal = lazy(() =>
+  import('@/features/players/PlayerDetailModal').then((m) => ({ default: m.PlayerDetailModal })),
+)
+const SearchModal = lazy(() =>
+  import('@/features/search/SearchModal').then((m) => ({ default: m.SearchModal })),
+)
+const TeamModal = lazy(() => import('@/features/teams/TeamModal').then((m) => ({ default: m.TeamModal })))
 
 /**
  * Gestiona las vistas superpuestas (buscador, competición, club, jugador y partido) para que
@@ -66,38 +76,48 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
     <NavigationContext.Provider value={api}>
       {children}
 
-      <StandingsModal
-        openLeagueId={leagueState.leagueId}
-        highlightTeamIds={leagueState.highlightTeamIds}
-        onClose={closeLeague}
-        onSelectMatch={setSelectedMatch}
-        onOpenTeam={(team, leagueId) => api.openTeam(team, leagueId)}
-      />
+      <Suspense fallback={null}>
+        {leagueState.leagueId && (
+          <StandingsModal
+            openLeagueId={leagueState.leagueId}
+            highlightTeamIds={leagueState.highlightTeamIds}
+            onClose={closeLeague}
+            onSelectMatch={setSelectedMatch}
+            onOpenTeam={(team, leagueId) => api.openTeam(team, leagueId)}
+          />
+        )}
 
-      <TeamModal
-        key={teamRef?.team.id ?? 'none'}
-        teamRef={teamRef}
-        onClose={closeTeam}
-        onSelectMatch={setSelectedMatch}
-        onSelectPlayer={(p) => api.openPlayer(p, teamRef?.team, teamRef?.leagueId)}
-      />
+        {teamRef && (
+          <TeamModal
+            key={teamRef.team.id}
+            teamRef={teamRef}
+            onClose={closeTeam}
+            onSelectMatch={setSelectedMatch}
+            onSelectPlayer={(p) => api.openPlayer(p, teamRef.team, teamRef.leagueId)}
+          />
+        )}
 
-      <MatchDetailModal
-        match={selectedMatch}
-        onClose={closeMatch}
-        onOpenStandings={(leagueId, highlightTeamIds) => api.openLeague(leagueId, highlightTeamIds)}
-        onOpenTeam={(team, leagueId) => api.openTeam(team, leagueId)}
-        onOpenPlayer={(p, team) => api.openPlayer(p, team, selectedMatch?.leagueId)}
-      />
+        {selectedMatch && (
+          <MatchDetailModal
+            match={selectedMatch}
+            onClose={closeMatch}
+            onOpenStandings={(leagueId, highlightTeamIds) => api.openLeague(leagueId, highlightTeamIds)}
+            onOpenTeam={(team, leagueId) => api.openTeam(team, leagueId)}
+            onOpenPlayer={(p, team) => api.openPlayer(p, team, selectedMatch.leagueId)}
+          />
+        )}
 
-      <PlayerDetailModal
-        key={playerRef ? `${playerRef.player.id || playerRef.player.name}` : 'none'}
-        playerRef={playerRef}
-        onClose={closePlayer}
-        onOpenTeam={(team, leagueId) => api.openTeam(team, leagueId)}
-      />
+        {playerRef && (
+          <PlayerDetailModal
+            key={playerRef.player.id || playerRef.player.name}
+            playerRef={playerRef}
+            onClose={closePlayer}
+            onOpenTeam={(team, leagueId) => api.openTeam(team, leagueId)}
+          />
+        )}
 
-      <SearchModal open={searchOpen} onClose={closeSearch} onSelect={handleSearchSelect} />
+        {searchOpen && <SearchModal open={searchOpen} onClose={closeSearch} onSelect={handleSearchSelect} />}
+      </Suspense>
     </NavigationContext.Provider>
   )
 }

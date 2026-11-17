@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { FavoriteStar } from '@/features/favorites/FavoriteStar'
+import { useFavoritesStore } from '@/features/favorites/favoritesStore'
 import type { LeagueMatches, Match } from '@/types'
 import { MatchCard } from './MatchCard'
 
@@ -14,6 +16,8 @@ export function LeagueSection({
   onOpenStandings,
 }: LeagueSectionProps) {
   const [open, setOpen] = useState(true)
+  const isFav = useFavoritesStore((s) => s.leagueIds.includes(league.id))
+  const toggleLeague = useFavoritesStore((s) => s.toggleLeague)
 
   return (
     <section className="overflow-hidden rounded-xl border border-border bg-card">
@@ -33,6 +37,12 @@ export function LeagueSection({
           </span>
         </button>
 
+        <FavoriteStar
+          active={isFav}
+          label={league.name}
+          onToggle={() => toggleLeague(league.id)}
+          className="size-7 border-transparent bg-transparent"
+        />
         <button
           type="button"
           aria-expanded={open}

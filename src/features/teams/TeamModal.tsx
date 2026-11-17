@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react'
 import { TeamCrest } from '@/components/ui/TeamCrest'
 import { MatchCard } from '@/features/matches/components/MatchCard'
 import { groupMatchesByDateLabel } from '@/lib/groupMatches'
+import { FavoriteStar } from '@/features/favorites/FavoriteStar'
+import { useFavoritesStore } from '@/features/favorites/favoritesStore'
 import { isNationalTeam } from '@/lib/nationalTeams'
 import type { Match, SquadPlayer, TeamProfile, TeamRef } from '@/types'
 import { useTeamProfile } from './useTeam'
@@ -261,6 +263,8 @@ function MatchList({
 
 export function TeamModal({ teamRef, onClose, onSelectMatch, onSelectPlayer }: TeamModalProps) {
   const [tab, setTab] = useState<TeamTab>('info')
+  const isFav = useFavoritesStore((s) => (teamRef ? s.teamIds.includes(teamRef.team.id) : false))
+  const toggleTeam = useFavoritesStore((s) => s.toggleTeam)
   const { data: profile, isPending, isError, refetch } = useTeamProfile(teamRef)
 
   useEffect(() => {
@@ -314,6 +318,7 @@ export function TeamModal({ teamRef, onClose, onSelectMatch, onSelectPlayer }: T
               <p className="mt-0.5 text-[11px] font-semibold text-accent">{profile.standingSummary}</p>
             )}
           </div>
+          <FavoriteStar active={isFav} label={team.name} onToggle={() => toggleTeam(teamRef.team.id)} />
           <button
             type="button"
             onClick={onClose}

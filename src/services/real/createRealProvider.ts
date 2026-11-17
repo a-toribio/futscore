@@ -1,3 +1,4 @@
+import { notifyMatchesUpdated } from '@/services/updates'
 import { toDateKey } from '@/lib/date'
 import type { GetMatchesParams, MatchesProvider } from '@/services/matchesProvider'
 import { leagues } from '@/services/leagueCatalog'
@@ -6,7 +7,11 @@ import type { LeagueMatches, Match, MatchDetail } from '@/types'
 export interface RealProviderConfig {
   name: string
   /** Descarga los partidos de las competiciones soportadas para un día (`YYYY-MM-DD`). */
-  fetchMatches: (date: string) => Promise<Match[]>
+  /**
+   * onLate avisa de que llegaron datos tardíos (fuentes lentas que no se esperaron):
+   * invalida la caché del día y notifica a la UI para refrescar.
+   */
+  fetchMatches: (date: string, onLate?: () => void) => Promise<Match[]>
   fetchMatchDetail?: (match: Match) => Promise<MatchDetail>
   liveRefetchMs: number
   /** Tiempo de vida de la caché: protege la cuota de la API. */
@@ -58,7 +63,10 @@ export function createRealProvider(config: RealProviderConfig): MatchesProvider 
     const hit = cache.get(date)
     if (hit && current.getTime() - hit.at < ttl) return hit.promise
 
-    const promise = fetchMatches(date)
+    const promise = fetchMatches(date, () => {
+      cache.delete(date)
+      notifyMatchesUpdated(date)
+    })
     cache.set(date, { at: current.getTime(), promise })
     promise.catch(() => {
       if (cache.get(date)?.promise === promise) cache.delete(date)

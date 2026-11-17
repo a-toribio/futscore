@@ -1,6 +1,8 @@
 import clsx from 'clsx'
 import { useEffect, useState } from 'react'
 import { TeamCrest } from '@/components/ui/TeamCrest'
+import { FavoriteStar } from '@/features/favorites/FavoriteStar'
+import { useFavoritesStore } from '@/features/favorites/favoritesStore'
 import { MatchCard } from '@/features/matches/components/MatchCard'
 import { groupMatchesByDateLabel } from '@/lib/groupMatches'
 import { leagues } from '@/services/leagueCatalog'
@@ -42,6 +44,8 @@ export function StandingsModal({
   onSelectMatch,
   onOpenTeam,
 }: StandingsModalProps) {
+  const favLeagueIds = useFavoritesStore((s) => s.leagueIds)
+  const toggleLeague = useFavoritesStore((s) => s.toggleLeague)
   const canShowTable = openLeagueId ? hasStandingsTable(openLeagueId) : true
   const [selectedTab, setSelectedTab] = useState<LeagueModalTab>('standings')
   const [selectedGroup, setSelectedGroup] = useState<string>('g1')
@@ -135,6 +139,14 @@ export function StandingsModal({
               </p>
             </div>
           </div>
+          {activeLeague && (
+            <FavoriteStar
+              active={favLeagueIds.includes(activeLeague.id)}
+              label={activeLeague.name}
+              onToggle={() => toggleLeague(activeLeague.id)}
+              className="mr-2"
+            />
+          )}
           <button
             type="button"
             onClick={onClose}

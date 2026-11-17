@@ -19,7 +19,6 @@ import type {
   TeamVenue,
 } from '@/types'
 import { createDefaultMatchDetail, deriveShortName } from './createRealProvider'
-import { getVerifiedClubInfo } from './clubRegistry'
 import { RFEF_CLUB_INDEX } from './rfefClubIndex'
 import { fetchClubDescription } from './wikipedia'
 
@@ -884,6 +883,8 @@ export async function fetchRfefTeamProfile(
   }
 
   const leagueName = leagueCatalog.find((l) => l.id === club.leagueId)?.name
+  // clubRegistry pesa ~128 kB: se carga solo al abrir la ficha de un club RFEF.
+  const { getVerifiedClubInfo } = await import('./clubRegistry')
   const verified = getVerifiedClubInfo(ref.team.name, ref.team.id)
   const venue = data.venue ?? verified?.venue
   const city = venue?.city ?? data.venue?.city ?? verified?.location
