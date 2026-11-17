@@ -326,7 +326,9 @@ export async function fetchPlayerProfile(ref: PlayerRef): Promise<PlayerProfile>
   // Mapear trayectoria deportiva oficial
   let career: PlayerCareerItem[] = []
   if (espnBioData?.teamHistory && espnBioData.teamHistory.length > 0) {
-    career = espnBioData.teamHistory.map((t) => {
+    career = espnBioData.teamHistory
+      .filter((t) => !t.logo?.includes('/countries/'))
+      .map((t) => {
       const isCurrent = t.isActive || (t.seasons ? t.seasons.includes('CURRENT') : false)
       let formattedPeriod = t.seasons ? t.seasons.replace(/CURRENT/g, 'Actualidad') : 'Etapa anterior'
       // Si tiene muchas fechas repetidas en selección nacional, abreviarlo

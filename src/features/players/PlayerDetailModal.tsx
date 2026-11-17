@@ -87,6 +87,7 @@ export function PlayerDetailModal({ playerRef, onClose, onOpenTeam }: PlayerDeta
 
   const posInfo = translatePosition(displayProfile.position || p.position)
   const isGoalkeeper = posInfo.code === 'POR'
+  const clubCareer = (displayProfile.career ?? []).filter((c) => !c.isNationalTeam)
   const natTeamRef = getNationalTeamByCountry(displayProfile.nationality || displayProfile.nationalTeam)
   const hasStats = Boolean(
     displayProfile.stats &&
@@ -389,11 +390,11 @@ export function PlayerDetailModal({ playerRef, onClose, onOpenTeam }: PlayerDeta
             <div className="space-y-4">
               <section className="rounded-xl border border-border bg-surface/50 p-4">
                 <h3 className="mb-3 text-[11px] font-bold uppercase tracking-wider text-accent">
-                  Historial de Clubes y Selección
+                  Historial de Clubes
                 </h3>
-                {displayProfile.career && displayProfile.career.length > 0 ? (
+                {clubCareer.length > 0 ? (
                   <ul className="relative border-l-2 border-border/80 ml-3 space-y-4 py-1">
-                    {displayProfile.career.map((item, idx) => {
+                    {clubCareer.map((item, idx) => {
                       const itemNatRef =
                         item.isNationalTeam ? getNationalTeamByCountry(item.teamName) : undefined
                       const canOpenNat = Boolean(itemNatRef && onOpenTeam)
