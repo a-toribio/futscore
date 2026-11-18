@@ -101,7 +101,7 @@ export function HeraldicShield({ team, className }: { team: Team; className?: st
 
 /** Escudo del equipo con imagen oficial (con eliminación de marco blanco) o escudo heráldico de respaldo. */
 export function TeamCrest({ team, className, size = 'sm' }: TeamCrestProps) {
-  const [failed, setFailed] = useState(false)
+  const [failedUrl, setFailedUrl] = useState<string | null>(null)
   const defaultSize = size === 'lg' ? 'size-12' : size === 'md' ? 'size-9' : 'size-7'
   const box = clsx(defaultSize, 'shrink-0', className)
 
@@ -109,6 +109,7 @@ export function TeamCrest({ team, className, size = 'sm' }: TeamCrestProps) {
   const transparentUrl = useTransparentCrest(resolvedUrl)
   const activeUrl = transparentUrl || resolvedUrl
   const hasValidUrl = Boolean(activeUrl && activeUrl.trim().length > 0)
+  const failed = Boolean(activeUrl && failedUrl === activeUrl)
 
   if (!hasValidUrl || failed) {
     return <HeraldicShield team={team} className={box} />
@@ -119,7 +120,7 @@ export function TeamCrest({ team, className, size = 'sm' }: TeamCrestProps) {
       src={activeUrl}
       alt={team.name}
       loading="lazy"
-      onError={() => setFailed(true)}
+      onError={() => setFailedUrl(activeUrl ?? null)}
       className={clsx(box, 'object-contain drop-shadow-xs transition-opacity duration-150')}
     />
   )

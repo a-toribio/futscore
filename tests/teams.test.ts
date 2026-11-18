@@ -9,6 +9,7 @@ import {
   isNationalTeam,
   translateNationalTeamName,
 } from '@/lib/nationalTeams'
+import { resolveSpanishTeamCrest } from '@/lib/spanishCrests'
 import type { Match } from '@/types'
 import {
   normalizeSearch,
@@ -306,5 +307,29 @@ describe('Selecciones Nacionales y Competiciones Internacionales', () => {
 
     expect(isNationalTeam({ id: 'espn-164', name: 'España' })).toBe(true)
     expect(isNationalTeam({ id: 'espn-86', name: 'Real Madrid' })).toBe(false)
+  })
+})
+
+describe('Real Unión de Irún y búsqueda por localidad', () => {
+  it('resuelve el escudo oficial del Real Unión en todas sus variantes sin confundirlo con Tenerife', () => {
+    const irunUrl = 'https://futbolme.com/static/img/club/escudo4557.png'
+    expect(resolveSpanishTeamCrest('Real Unión')).toBe(irunUrl)
+    expect(resolveSpanishTeamCrest('Real Unión Club')).toBe(irunUrl)
+    expect(resolveSpanishTeamCrest('Real Unión de Irún')).toBe(irunUrl)
+    expect(resolveSpanishTeamCrest('Irún')).toBe(irunUrl)
+    expect(resolveSpanishTeamCrest('Real Unión Club B')).toBe(irunUrl)
+    expect(resolveSpanishTeamCrest('Real Unión de Tenerife SC')).toBe(
+      'https://futbolme.com/static/img/club/escudo3561.png',
+    )
+  })
+
+  it('encuentra al Real Unión Club al buscar "irun" y devuelve su ficha verificada', () => {
+    const teams = [entry('rfef-real-uni-n-club', 'Real Unión Club', '1ª RFEF · Grupo 1')]
+    const results = searchEntities('irun', teams)
+    expect(results.some((r) => r.kind === 'team' && r.name === 'Real Unión Club')).toBe(true)
+
+    const clubInfo = getVerifiedClubInfo('Irún')
+    expect(clubInfo?.venue.name).toBe('Stadium Gal')
+    expect(clubInfo?.venue.city).toBe('Irún')
   })
 })

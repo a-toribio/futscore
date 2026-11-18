@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type Ref } from 'react'
 import { TeamCrest } from '@/components/ui/TeamCrest'
 import { FavoriteStar } from '@/features/favorites/FavoriteStar'
 import { useFavoritesStore } from '@/features/favorites/favoritesStore'
@@ -249,16 +249,18 @@ function MatchList({
   empty,
   onSelect,
   accent,
+  sectionRef,
 }: {
   title: string
   matches: Match[]
   empty: string
   onSelect: (m: Match) => void
   accent?: boolean
+  sectionRef?: Ref<HTMLElement>
 }) {
   const groups = groupMatchesByDateLabel(matches)
   return (
-    <section className="space-y-2">
+    <section ref={sectionRef} className="space-y-2">
       <h3
         className={clsx(
           'px-1 text-xs font-bold uppercase tracking-wider',
@@ -588,6 +590,50 @@ export function TeamModal({
   const isFav = useFavoritesStore((s) => (teamRef ? s.teamIds.includes(teamRef.team.id) : false))
   const toggleTeam = useFavoritesStore((s) => s.toggleTeam)
   const { data: profile, isPending, isError, refetch } = useTeamProfile(teamRef)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const firstUpcomingRef = useRef<HTMLElement>(null)
+
+  const pastChronological = useMemo(
+    () =>
+      [...(profile?.pastMatches ?? [])].sort(
+        (a, b) => Date.parse(a.kickoff) - Date.parse(b.kickoff),
+      ),
+    [profile?.pastMatches],
+  )
+  const upcomingChronological = useMemo(
+    () =>
+      [...(profile?.upcomingMatches ?? [])].sort(
+        (a, b) => Date.parse(a.kickoff) - Date.parse(b.kickoff),
+      ),
+    [profile?.upcomingMatches],
+  )
+
+  useEffect(() => {
+    if (!teamRef) return
+    const container = scrollContainerRef.current
+    if (!container) return
+
+    if (tab !== 'matches') {
+      container.scrollTop = 0
+      return
+    }
+    if (!profile) return
+
+    const rafId = requestAnimationFrame(() => {
+      if (pastChronological.length > 0 && upcomingChronological.length > 0 && firstUpcomingRef.current) {
+        const containerRect = container.getBoundingClientRect()
+        const targetRect = firstUpcomingRef.current.getBoundingClientRect()
+        const targetTop = targetRect.top - containerRect.top + container.scrollTop
+        container.scrollTop = Math.max(0, targetTop - container.clientHeight * 0.42)
+      } else if (pastChronological.length > 0 && upcomingChronological.length === 0) {
+        container.scrollTop = container.scrollHeight
+      } else {
+        container.scrollTop = 0
+      }
+    })
+
+    return () => cancelAnimationFrame(rafId)
+  }, [teamRef, tab, profile, pastChronological.length, upcomingChronological.length])
 
   useEffect(() => {
     if (!teamRef) return
@@ -684,7 +730,10 @@ export function TeamModal({
         </div>
 
         {/* Contenido */}
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4 [scrollbar-width:thin]">
+        <div
+          ref={scrollContainerRef}
+          className="relative min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4 [scrollbar-width:thin]"
+        >
           {tab === 'standings' ? (
             <TeamStandingsTab
               team={team}
@@ -725,18 +774,26 @@ export function TeamModal({
                     <SquadTab squad={profile.squad} isNat={isNat} onSelectPlayer={onSelectPlayer} />
                   )}
                   {tab === 'matches' && (
-                    <div className="flex flex-col gap-5">
+                    <div
+                      className={clsx(
+                        'flex flex-col gap-5',
+                        pastChronological.length > 0 &&
+                          upcomingChronological.length > 0 &&
+                          'pb-[35dvh]',
+                      )}
+                    >
                       <MatchList
-                        title="Próximos partidos"
-                        accent
-                        matches={profile.upcomingMatches}
-                        empty="No hay próximos partidos programados."
+                        title="Partidos anteriores"
+                        matches={pastChronological}
+                        empty="No hay resultados recientes registrados."
                         onSelect={onSelectMatch}
                       />
                       <MatchList
-                        title="Partidos anteriores"
-                        matches={profile.pastMatches}
-                        empty="No hay resultados recientes registrados."
+                        sectionRef={firstUpcomingRef}
+                        title="Próximos partidos"
+                        accent
+                        matches={upcomingChronological}
+                        empty="No hay próximos partidos programados."
                         onSelect={onSelectMatch}
                       />
                     </div>

@@ -531,22 +531,96 @@ export const SPANISH_CLUB_CREST_IDS: Record<string, number> = {
   "CD Colegios Diocesanos": 5104,
   "Salamanca CF UDS B": 7863,
   "CD Mirandés B": 4721,
+  "Real Unión": 4557,
+  "Real Unión de Irún": 4557,
+  "Real Unión Irún": 4557,
+  "Real Unión Club de Irún": 4557,
+  "Real Unión B": 4557,
+  "Irún": 4557,
+  "CD Real Unión": 4557,
+  "Cultural Leonesa": 4389,
+  "Cultural y Deportiva Leonesa": 4389,
+  "Nàstic de Tarragona": 4274,
+  "Gimnàstic": 4274,
+  "Nàstic": 4274,
+  "Racing de Santander": 4487,
+  "Real Racing Club de Santander": 4487,
+  "Racing Santander": 4487,
+  "Racing de Ferrol": 4364,
+  "Racing Ferrol": 4364,
+  "Recreativo de Huelva": 4491,
+  "Recreativo": 4491,
+  "Deportivo de La Coruña": 4446,
+  "RC Deportivo": 4446,
+  "Deportivo La Coruña": 4446,
+  "Sporting de Gijón": 4438,
+  "Sporting Gijón": 4438,
+  "Gimnástica de Torrelavega": 4558,
+  "RS Gimnástica de Torrelavega": 4558,
+  "UD San Sebastián de los Reyes": 4543,
+  "Sanse": 4543,
+  "Atlético Sanluqueño": 98,
+  "Atlético Baleares": 4775,
+  "CE L'Hospitalet": 4203,
+  "L'Hospitalet": 4203,
+  "Hospitalet": 4203,
+  "Sant Andreu": 4517,
+  "CE Sabadell": 4250,
+  "Sabadell": 4250,
+  "Real Madrid Castilla": 4437,
+  "RM Castilla": 4437,
+  "Bilbao Athletic": 4443,
+  "Athletic Club Bilbao": 4443,
+  "Real Sociedad B": 4464,
+  "Celta Fortuna": 4465,
+  "RC Celta Fortuna": 4465,
+  "Celta de Vigo B": 4465,
+  "Barcelona Atlètic": 4466,
+  "Barça Atlètic": 4466,
+  "FC Barcelona B": 4466,
+  "Betis Deportivo": 4419,
+  "Real Betis B": 4419,
+  "Valencia Mestalla": 4475,
+  "Valencia CF Mestalla": 4475,
 }
 
 const dynamicCrestUrls = new Map<string, string>()
 
 export function normalizeSpanishClubName(name: string): string {
-  return name
+  const base = name
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[´’']/g, ' ')
+
+  const withoutOrg = base
     .replace(
-      /\b(cf|cd|ud|sd|ad|cp|rcd|rc|fc|ca|ce|ue|up|ucam|scr|rb|um|fe|cfj|udc|cyd|club|deportivo|deportiva|real|atletico|atletic|union|asociacion|balompie|futbol|industrial|sad)\b/g,
+      /\b(cf|cd|ud|sd|ad|cp|rcd|rc|fc|ca|ce|ue|up|ucam|scr|rb|um|fe|cfj|udc|cyd|rs|cda|club|asociacion|sad)\b/g,
       ' ',
     )
     .replace(/[^a-z0-9]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
+
+  const withoutConnectors = withoutOrg
+    .replace(/\b(de|del|la|las|los|el|i|y)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  const core = withoutOrg
+    .replace(
+      /\b(deportivo|deportiva|real|atletico|atletic|union|balompie|futbol|industrial)\b/g,
+      ' ',
+    )
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  // Si todas las palabras sustantivas fueron eliminadas (p. ej. "Real Unión Club" o "Real Unión Club B"),
+  // conservamos las palabras descriptivas ("real union") para que nunca quede vacío ni pierda su escudo.
+  if (core.replace(/\b[bc]\b/g, '').trim().length < 3) {
+    return withoutConnectors || withoutOrg
+  }
+  return core
 }
 
 function cleanExact(name: string): string {
@@ -554,6 +628,7 @@ function cleanExact(name: string): string {
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[´’']/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
 }
@@ -562,17 +637,29 @@ interface IndexedClub {
   original: string
   exact: string
   norm: string
+  normCompact: string
   isReserve: boolean
   url: string
 }
 
-const indexedClubs: IndexedClub[] = Object.entries(SPANISH_CLUB_CREST_IDS).map(([original, id]) => ({
-  original,
-  exact: cleanExact(original),
-  norm: normalizeSpanishClubName(original),
-  isReserve: /\b(b|c|promesas|imperial|ilicitano|mestalla|mirandilla|fabril)\s*$/i.test(original),
-  url: buildFutbolmeCrestUrl(id),
-}))
+function stripSpanishConnectors(norm: string): string {
+  return norm
+    .replace(/\b(de|del|la|las|los|el|i|y)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+const indexedClubs: IndexedClub[] = Object.entries(SPANISH_CLUB_CREST_IDS).map(([original, id]) => {
+  const norm = normalizeSpanishClubName(original)
+  return {
+    original,
+    exact: cleanExact(original),
+    norm,
+    normCompact: stripSpanishConnectors(norm),
+    isReserve: /\b(b|c|promesas|imperial|ilicitano|mestalla|mirandilla|fabril|fortuna|castilla)\s*$/i.test(original),
+    url: buildFutbolmeCrestUrl(id),
+  }
+})
 
 /**
  * Registra dinámicamente el escudo real de un club extraído en vivo desde una tabla o partido.
@@ -609,7 +696,7 @@ export function resolveSpanishTeamCrest(name: string, existingLogoUrl?: string):
 
   const exact = cleanExact(name)
   const fromDynamicExact = dynamicCrestUrls.get(exact)
-  if (fromDynamicExact) return fromDynamicExact
+  if (fromDynamicExact) return toFutbolmeUrl(fromDynamicExact)
 
   const byExact = indexedClubs.find((c) => c.exact === exact)
   if (byExact) return byExact.url
@@ -618,14 +705,26 @@ export function resolveSpanishTeamCrest(name: string, existingLogoUrl?: string):
   if (!norm) return undefined
 
   const fromDynamicNorm = dynamicCrestUrls.get(norm)
-  if (fromDynamicNorm) return fromDynamicNorm
+  if (fromDynamicNorm) return toFutbolmeUrl(fromDynamicNorm)
 
-  const isQueryReserve = /\b(b|c|promesas|imperial|ilicitano|mestalla|mirandilla|fabril)\s*$/i.test(name)
+  const isQueryReserve =
+    /\b(b|c|promesas|imperial|ilicitano|mestalla|mirandilla|fabril|fortuna|castilla)\s*$/i.test(name)
 
   const normMatches = indexedClubs.filter((c) => c.norm === norm)
   if (normMatches.length > 0) {
     const preferred = normMatches.find((c) => c.isReserve === isQueryReserve) ?? normMatches[0]
     return preferred.url
+  }
+
+  // Respaldo sin preposiciones ("Real Unión de Irún" == "Real Unión Irún", "Gimnástica de Torrelavega" == "Gimnástica Torrelavega")
+  // manteniendo separados clubes distintos como "Atlético de Madrid" vs "Real Madrid" mediante `exact`/`norm` previos.
+  const compact = stripSpanishConnectors(norm)
+  if (compact.length >= 4) {
+    const compactMatches = indexedClubs.filter((c) => c.normCompact === compact)
+    if (compactMatches.length > 0) {
+      const preferred = compactMatches.find((c) => c.isReserve === isQueryReserve) ?? compactMatches[0]
+      return preferred.url
+    }
   }
 
   // Coincidencia parcial por nombre significativo (>= 4 caracteres)

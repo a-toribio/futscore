@@ -157,6 +157,23 @@ export function normalizeSearch(s: string): string {
     .trim()
 }
 
+const SPANISH_SEARCH_ALIASES: Record<string, string> = {
+  'real union club': 'irun real union de irun stadium gal',
+  'real union club b': 'irun real union de irun',
+  'cyd leonesa': 'cultural deportiva leonesa leon',
+  'gimnastic de tarragona': 'nastic tarragona',
+  'rs gimnastica': 'gimnastica de torrelavega cantabria',
+  'gimnastica torrelavega': 'rs gimnastica de torrelavega',
+  'arenas club': 'getxo gobela',
+  'ud san sebastian reyes': 'sanse san sebastian de los reyes',
+  'san sebastian de los reyes': 'sanse',
+  'ce l hospitalet': 'hospitalet',
+  'sestao river club': 'sestao las llanas',
+  'racing club ferrol': 'racing de ferrol a malata',
+  'rc recreativo de huelva': 'recreativo huelva',
+  'real aviles industrial cf': 'aviles',
+}
+
 function scoreMatch(haystack: string, tokens: string[]): number {
   if (!tokens.every((t) => haystack.includes(t))) return -1
   // Mejor puntuación si el nombre empieza por la búsqueda o coincide por palabra completa
@@ -196,9 +213,13 @@ export function searchEntities(
   const teamResults = teams
     .map((e) => {
       const nat = isNationalTeam(e.ref.team, e.ref.leagueId)
+      const normName = normalizeSearch(e.ref.team.name)
+      const alias = SPANISH_SEARCH_ALIASES[normName]
       const haystack = nat
         ? normalizeSearch(`${e.ref.team.name} seleccion ${e.ref.team.name}`)
-        : normalizeSearch(e.ref.team.name)
+        : alias
+          ? `${normName} ${alias}`
+          : normName
       return { e, s: scoreMatch(haystack, tokens) }
     })
     .filter((x) => x.s >= 0)

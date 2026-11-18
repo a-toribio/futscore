@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { TeamCrest } from '@/components/ui/TeamCrest'
 import { FavoriteStar } from '@/features/favorites/FavoriteStar'
 import { useFavoritesStore } from '@/features/favorites/favoritesStore'
@@ -83,6 +83,87 @@ export function StandingsModal({
 
   const standingsQuery = useStandings(openLeagueId, activeGroupCode)
   const matchesQuery = useLeagueMatches(openLeagueId, activeGroupCode)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const firstUpcomingRef = useRef<HTMLElement>(null)
+
+  const normQuery = matchTeamQuery.trim().toLowerCase()
+  const allUpcoming = useMemo(
+    () =>
+      [...(matchesQuery.data?.upcomingMatches ?? [])].sort(
+        (a, b) => Date.parse(a.kickoff) - Date.parse(b.kickoff),
+      ),
+    [matchesQuery.data?.upcomingMatches],
+  )
+  const allPast = useMemo(
+    () =>
+      [...(matchesQuery.data?.pastMatches ?? [])].sort(
+        (a, b) => Date.parse(a.kickoff) - Date.parse(b.kickoff),
+      ),
+    [matchesQuery.data?.pastMatches],
+  )
+
+  const filteredUpcoming = useMemo(
+    () =>
+      normQuery
+        ? allUpcoming.filter(
+            (m) =>
+              m.homeTeam.name.toLowerCase().includes(normQuery) ||
+              m.awayTeam.name.toLowerCase().includes(normQuery),
+          )
+        : allUpcoming,
+    [allUpcoming, normQuery],
+  )
+
+  const filteredPast = useMemo(
+    () =>
+      normQuery
+        ? allPast.filter(
+            (m) =>
+              m.homeTeam.name.toLowerCase().includes(normQuery) ||
+              m.awayTeam.name.toLowerCase().includes(normQuery),
+          )
+        : allPast,
+    [allPast, normQuery],
+  )
+
+  const pastCount = filteredPast.length
+  const upcomingCount = filteredUpcoming.length
+
+  useEffect(() => {
+    if (!openLeagueId) return
+    const container = scrollContainerRef.current
+    if (!container) return
+
+    if (activeTab !== 'matches') {
+      container.scrollTop = 0
+      return
+    }
+    if (matchesQuery.isPending || matchesQuery.isError) return
+
+    const rafId = requestAnimationFrame(() => {
+      if (matchesSubFilter === 'all' && pastCount > 0 && upcomingCount > 0 && firstUpcomingRef.current) {
+        const containerRect = container.getBoundingClientRect()
+        const targetRect = firstUpcomingRef.current.getBoundingClientRect()
+        const targetTop = targetRect.top - containerRect.top + container.scrollTop
+        container.scrollTop = Math.max(0, targetTop - container.clientHeight * 0.42)
+      } else if (matchesSubFilter === 'past' && pastCount > 0) {
+        container.scrollTop = container.scrollHeight
+      } else {
+        container.scrollTop = 0
+      }
+    })
+
+    return () => cancelAnimationFrame(rafId)
+  }, [
+    openLeagueId,
+    activeGroupCode,
+    activeTab,
+    matchesSubFilter,
+    matchesQuery.isPending,
+    matchesQuery.isError,
+    pastCount,
+    upcomingCount,
+  ])
 
   if (!openLeagueId) return null
 
@@ -91,26 +172,6 @@ export function StandingsModal({
     openLeagueId === 'ucl' || openLeagueId === 'europa' || openLeagueId === 'conf'
   const isSegunda = openLeagueId === 'segunda'
   const isRfef = isRfefLeague(openLeagueId)
-
-  const normQuery = matchTeamQuery.trim().toLowerCase()
-  const allUpcoming = matchesQuery.data?.upcomingMatches ?? []
-  const allPast = matchesQuery.data?.pastMatches ?? []
-
-  const filteredUpcoming = normQuery
-    ? allUpcoming.filter(
-        (m) =>
-          m.homeTeam.name.toLowerCase().includes(normQuery) ||
-          m.awayTeam.name.toLowerCase().includes(normQuery),
-      )
-    : allUpcoming
-
-  const filteredPast = normQuery
-    ? allPast.filter(
-        (m) =>
-          m.homeTeam.name.toLowerCase().includes(normQuery) ||
-          m.awayTeam.name.toLowerCase().includes(normQuery),
-      )
-    : allPast
 
   const upcomingGroups = groupMatchesByDateLabel(filteredUpcoming)
   const pastGroups = groupMatchesByDateLabel(filteredPast)
@@ -212,7 +273,10 @@ export function StandingsModal({
         </div>
 
         {/* Contenido scrollable */}
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4 [scrollbar-width:thin]">
+        <div
+          ref={scrollContainerRef}
+          className="relative min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4 [scrollbar-width:thin]"
+        >
           {activeTab === 'standings' && (
             <>
               {standingsQuery.isPending && (
@@ -477,7 +541,15 @@ export function StandingsModal({
           )}
 
           {activeTab === 'matches' && (
-            <div className="flex flex-col gap-4">
+            <div
+              className={clsx(
+                'flex flex-col gap-4',
+                matchesSubFilter === 'all' &&
+                  pastGroups.length > 0 &&
+                  upcomingGroups.length > 0 &&
+                  'pb-[35dvh]',
+              )}
+            >
               {matchesQuery.isPending && (
                 <div className="flex flex-col items-center justify-center py-12 text-center text-xs text-accent">
                   <span className="inline-block size-3 animate-ping rounded-full bg-accent mb-3" />
@@ -503,7 +575,7 @@ export function StandingsModal({
               {!matchesQuery.isPending && !matchesQuery.isError && (
                 <>
                   {/* Selector de tipo de partidos y buscador rápido por club */}
-                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-surface/70 p-2">
+                  <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-surface/95 p-2 backdrop-blur-xs shadow-xs">
                     <div className="flex items-center gap-1 rounded-lg border border-border bg-card p-0.5">
                       <button
                         type="button"
@@ -563,21 +635,21 @@ export function StandingsModal({
                     </div>
                   </div>
 
-                  {/* Próximos partidos */}
-                  {matchesSubFilter !== 'past' && (
+                  {/* Partidos anteriores / Resultados (hacia arriba) */}
+                  {matchesSubFilter !== 'upcoming' && (
                     <section className="space-y-2">
-                      <h3 className="px-1 text-xs font-bold uppercase tracking-wider text-accent">
-                        Próximos encuentros ({filteredUpcoming.length})
+                      <h3 className="px-1 text-xs font-bold uppercase tracking-wider text-fg-muted">
+                        Resultados anteriores ({filteredPast.length})
                       </h3>
-                      {upcomingGroups.length === 0 ? (
+                      {pastGroups.length === 0 ? (
                         <div className="rounded-xl border border-border bg-card p-4 text-center text-xs text-fg-muted">
                           {matchTeamQuery
-                            ? `No hay próximos encuentros para "${matchTeamQuery}".`
-                            : 'No hay próximos encuentros programados.'}
+                            ? `No hay resultados anteriores para "${matchTeamQuery}".`
+                            : 'No hay resultados anteriores registrados.'}
                         </div>
                       ) : (
                         <div className="space-y-2.5">
-                          {upcomingGroups.map((group) => (
+                          {pastGroups.map((group) => (
                             <div
                               key={group.dateLabel}
                               className="overflow-hidden rounded-xl border border-border bg-card"
@@ -604,21 +676,21 @@ export function StandingsModal({
                     </section>
                   )}
 
-                  {/* Partidos anteriores / Resultados */}
-                  {matchesSubFilter !== 'upcoming' && (
-                    <section className="space-y-2">
-                      <h3 className="px-1 text-xs font-bold uppercase tracking-wider text-fg-muted">
-                        Resultados anteriores ({filteredPast.length})
+                  {/* Próximos partidos (desde la mitad hacia abajo) */}
+                  {matchesSubFilter !== 'past' && (
+                    <section ref={firstUpcomingRef} className="space-y-2">
+                      <h3 className="px-1 text-xs font-bold uppercase tracking-wider text-accent">
+                        Próximos encuentros ({filteredUpcoming.length})
                       </h3>
-                      {pastGroups.length === 0 ? (
+                      {upcomingGroups.length === 0 ? (
                         <div className="rounded-xl border border-border bg-card p-4 text-center text-xs text-fg-muted">
                           {matchTeamQuery
-                            ? `No hay resultados anteriores para "${matchTeamQuery}".`
-                            : 'No hay resultados anteriores registrados.'}
+                            ? `No hay próximos encuentros para "${matchTeamQuery}".`
+                            : 'No hay próximos encuentros programados.'}
                         </div>
                       ) : (
                         <div className="space-y-2.5">
-                          {pastGroups.map((group) => (
+                          {upcomingGroups.map((group) => (
                             <div
                               key={group.dateLabel}
                               className="overflow-hidden rounded-xl border border-border bg-card"

@@ -823,6 +823,24 @@ export const VERIFIED_CLUBS: Record<string, VerifiedClubProfile> = {
           "url": "https://es.wikipedia.org/wiki/F%C3%BAtbol_Club_Cartagena"
       }
   },
+  'real-union': {
+      "fullName": "Real Unión Club de Irún, S.A.D.",
+      "founded": "1915",
+      "location": "Irún, Guipúzcoa, España",
+      "website": "www.realunionclub.com",
+      "kit": "Camiseta blanca con detalles negros, pantalón negro y medias negras.",
+      "venue": {
+          "name": "Stadium Gal",
+          "city": "Irún",
+          "address": "Patricio Arabolaza Kalea, 2",
+          "capacity": 5000,
+          "opened": "1926"
+      },
+      "description": {
+          "text": "El Real Unión Club de Irún nació en 1915 de la fusión del Irún Sporting Club y el Racing Club de Irún. Tetracampeón de la Copa de España y miembro fundador de la Primera División en 1929.",
+          "url": "https://es.wikipedia.org/wiki/Real_Uni%C3%B3n_Club"
+      }
+  },
   'bournemouth': {
       "fullName": "AFC Bournemouth",
       "founded": "1899",
@@ -2584,6 +2602,10 @@ const ALIASES: Record<string, string> = {
   'cd mirandes': 'mirandes',
   'cartagena': 'cartagena',
   'fc cartagena': 'cartagena',
+  'real union': 'real-union',
+  'real union club': 'real-union',
+  'real union de irun': 'real-union',
+  'irun': 'real-union',
 
   // Inglaterra (Premier League)
   'arsenal': 'arsenal',
@@ -2956,6 +2978,7 @@ export function getVerifiedClubInfo(teamName: string, teamId?: string): Verified
 
   // Búsqueda por token significativo
   for (const [k, prof] of CLUB_LOOKUP.entries()) {
+    if (k === 'real union') continue
     if (k.length >= 4 && (norm.includes(k) || k.includes(norm))) {
       return prof
     }

@@ -432,18 +432,15 @@ export function PlayerDetailModal({ playerRef, onClose, onOpenTeam }: PlayerDeta
                             )}
                           >
                             <div className="flex items-center gap-2.5 min-w-0">
-                              {item.teamLogo ? (
-                                <img
-                                  src={item.teamLogo}
-                                  alt={item.teamName}
-                                  loading="lazy"
-                                  className="size-6 object-contain shrink-0"
-                                />
-                              ) : (
-                                <div className="size-6 rounded-full bg-surface border border-border flex items-center justify-center text-[10px] font-black text-fg-subtle shrink-0">
-                                  ⚽
-                                </div>
-                              )}
+                              <TeamCrest
+                                team={{
+                                  id: item.teamName,
+                                  name: item.teamName,
+                                  shortName: item.teamName.slice(0, 3).toUpperCase(),
+                                  logoUrl: item.teamLogo,
+                                }}
+                                className="size-6 shrink-0"
+                              />
                               <div className="min-w-0">
                                 <span
                                   className={clsx(

@@ -6,10 +6,11 @@ import {
 } from '../src/lib/crestTransparency'
 
 describe('crestTransparency', () => {
-  it('detecta correctamente píxeles blancos y casi blancos', () => {
+  it('detecta correctamente píxeles blancos, blanco roto y casi blancos', () => {
     expect(isNearWhite(255, 255, 255, 255)).toBe(true)
     expect(isNearWhite(240, 240, 240, 255)).toBe(true)
     expect(isNearWhite(232, 232, 232, 255)).toBe(true)
+    expect(isNearWhite(222, 222, 222, 255)).toBe(true)
     // Píxel oscuro o de color
     expect(isNearWhite(200, 200, 200, 255)).toBe(false)
     expect(isNearWhite(255, 0, 0, 255)).toBe(false)
@@ -109,5 +110,56 @@ describe('crestTransparency', () => {
 
     const result = floodFillTransparentBackground(mockCtx, width, height)
     expect(result).toBe(false)
+  })
+
+  it('elimina un recuadro gris claro o blanco roto aunque tenga margen exterior transparente de 1px', () => {
+    // 7x7: borde exterior (0 y 6) transparente; marco interior (1..5) gris muy claro (222);
+    // contorno protector (2..4) oscuro; centro (3,3) blanco puro protegido.
+    const width = 7
+    const height = 7
+    const buffer = new Uint8ClampedArray(width * height * 4)
+
+    for (let y = 1; y <= 5; y++) {
+      for (let x = 1; x <= 5; x++) {
+        const idx = (y * width + x) * 4
+        buffer[idx] = 222
+        buffer[idx + 1] = 222
+        buffer[idx + 2] = 222
+        buffer[idx + 3] = 255
+      }
+    }
+
+    for (let y = 2; y <= 4; y++) {
+      for (let x = 2; x <= 4; x++) {
+        const idx = (y * width + x) * 4
+        if (x === 3 && y === 3) {
+          buffer[idx] = 255
+          buffer[idx + 1] = 255
+          buffer[idx + 2] = 255
+          buffer[idx + 3] = 255
+        } else {
+          buffer[idx] = 12
+          buffer[idx + 1] = 12
+          buffer[idx + 2] = 12
+          buffer[idx + 3] = 255
+        }
+      }
+    }
+
+    const imgData = { data: buffer, width, height } as unknown as ImageData
+    const mockCtx = {
+      getImageData: () => imgData,
+      putImageData: () => {},
+    } as unknown as CanvasRenderingContext2D
+
+    const result = floodFillTransparentBackground(mockCtx, width, height)
+    expect(result).toBe(true)
+
+    // Recuadro blanco roto (1, 1) ahora debe ser transparente
+    expect(buffer[(1 * width + 1) * 4 + 3]).toBe(0)
+    // Contorno del escudo (2, 2) sigue opaco
+    expect(buffer[(2 * width + 2) * 4 + 3]).toBe(255)
+    // Centro blanco interior (3, 3) permanece opaco
+    expect(buffer[(3 * width + 3) * 4 + 3]).toBe(255)
   })
 })
