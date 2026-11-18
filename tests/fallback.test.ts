@@ -112,8 +112,8 @@ describe('createRealProvider', () => {
     ])
     const provider = createRealProvider({ name: 'T', fetchMatches, liveRefetchMs: 1, ttlMs: { today: 1000, other: 1000 }, now: () => NOW })
     const groups = await provider.getMatchesByDate({ date: '2026-11-10' })
-    expect(groups.map((g) => g.league.id)).toEqual(['ucl', 'laliga'])
-    expect(groups[1].matches.map((m) => m.id)).toEqual(['a', 'b'])
+    expect(groups.map((g) => g.league.id)).toEqual(['laliga', 'ucl'])
+    expect(groups[0].matches.map((m) => m.id)).toEqual(['a', 'b'])
   })
 
   it('cachea dentro del TTL y vuelve a pedir pasado el TTL', async () => {

@@ -6,14 +6,18 @@ import {
 } from '../src/lib/crestTransparency'
 
 describe('crestTransparency', () => {
-  it('detecta correctamente píxeles blancos, blanco roto y casi blancos', () => {
+  it('detecta correctamente píxeles blancos, blanco roto, cuantizados cálidos/fríos y casi blancos', () => {
     expect(isNearWhite(255, 255, 255, 255)).toBe(true)
     expect(isNearWhite(240, 240, 240, 255)).toBe(true)
     expect(isNearWhite(232, 232, 232, 255)).toBe(true)
     expect(isNearWhite(222, 222, 222, 255)).toBe(true)
+    // Blancos cuantizados cálido (crema) y frío (cian-blanco) de escudos de Futbolme
+    expect(isNearWhite(255, 242, 203, 255)).toBe(true)
+    expect(isNearWhite(201, 243, 255, 255)).toBe(true)
     // Píxel oscuro o de color
     expect(isNearWhite(200, 200, 200, 255)).toBe(false)
     expect(isNearWhite(255, 0, 0, 255)).toBe(false)
+    expect(isNearWhite(254, 231, 145, 255)).toBe(false)
     // Píxel ya transparente
     expect(isNearWhite(255, 255, 255, 0)).toBe(false)
   })
@@ -161,5 +165,65 @@ describe('crestTransparency', () => {
     expect(buffer[(2 * width + 2) * 4 + 3]).toBe(255)
     // Centro blanco interior (3, 3) permanece opaco
     expect(buffer[(3 * width + 3) * 4 + 3]).toBe(255)
+  })
+
+  it('elimina un recuadro blanco rodeado de un marco exterior oscuro de 1px preservando el escudo central', () => {
+    const width = 24
+    const height = 24
+    const buffer = new Uint8ClampedArray(width * height * 4)
+
+    // Rellenar con recuadro blanco crema (255, 252, 220) y un borde exterior oscuro de 1px
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const idx = (y * width + x) * 4
+        const isOuterBorder = x === 0 || x === width - 1 || y === 0 || y === height - 1
+        if (isOuterBorder) {
+          buffer[idx] = 66
+          buffer[idx + 1] = 67
+          buffer[idx + 2] = 67
+          buffer[idx + 3] = 255
+        } else {
+          buffer[idx] = 255
+          buffer[idx + 1] = 252
+          buffer[idx + 2] = 220
+          buffer[idx + 3] = 255
+        }
+      }
+    }
+
+    // Escudo central (8..15, 8..15) con contorno rojo (200, 20, 20) y centro blanco puro
+    for (let y = 8; y <= 15; y++) {
+      for (let x = 8; x <= 15; x++) {
+        const idx = (y * width + x) * 4
+        const isEdge = x === 8 || x === 15 || y === 8 || y === 15
+        if (isEdge) {
+          buffer[idx] = 200
+          buffer[idx + 1] = 20
+          buffer[idx + 2] = 20
+          buffer[idx + 3] = 255
+        } else {
+          buffer[idx] = 255
+          buffer[idx + 1] = 255
+          buffer[idx + 2] = 255
+          buffer[idx + 3] = 255
+        }
+      }
+    }
+
+    const imgData = { data: buffer, width, height } as unknown as ImageData
+    const mockCtx = {
+      getImageData: () => imgData,
+      putImageData: () => {},
+    } as unknown as CanvasRenderingContext2D
+
+    const result = floodFillTransparentBackground(mockCtx, width, height)
+    expect(result).toBe(true)
+
+    // Borde exterior oscuro de 1px y recuadro blanco interior eliminados
+    expect(buffer[3]).toBe(0)
+    expect(buffer[(3 * width + 3) * 4 + 3]).toBe(0)
+    // Contorno rojo del escudo y blanco interior intactos
+    expect(buffer[(8 * width + 8) * 4 + 3]).toBe(255)
+    expect(buffer[(11 * width + 11) * 4 + 3]).toBe(255)
   })
 })

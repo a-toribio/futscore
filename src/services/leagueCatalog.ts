@@ -11,8 +11,36 @@ export interface CatalogEntry extends League {
   sources: LeagueSourceIds
 }
 
-/** Competiciones soportadas, por orden de prioridad en la visualización. */
+/**
+ * Competiciones soportadas, por orden de prioridad en la visualización:
+ * 5 grandes ligas (española primero) -> competiciones europeas -> 2ª divisiones (española primero)
+ * -> 3ªs categorías (española primero) -> 4ªs categorías (española primero) -> 5ª categoría (española)
+ * -> copas nacionales (española primero) -> selecciones -> otras ligas.
+ */
 export const leagueCatalog: CatalogEntry[] = [
+  // ── 1ª Categoría: Las 5 Grandes Ligas (España primero) ──
+  {
+    id: 'laliga', name: 'LaLiga', country: 'España', flag: '🇪🇸',
+    sources: { espn: 'esp.1', footballData: 'PD', apiFootball: 140 },
+  },
+  {
+    id: 'premier', name: 'Premier League', country: 'Inglaterra', flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿',
+    sources: { espn: 'eng.1', footballData: 'PL', apiFootball: 39 },
+  },
+  {
+    id: 'seriea', name: 'Serie A', country: 'Italia', flag: '🇮🇹',
+    sources: { espn: 'ita.1', footballData: 'SA', apiFootball: 135 },
+  },
+  {
+    id: 'bundesliga', name: 'Bundesliga', country: 'Alemania', flag: '🇩🇪',
+    sources: { espn: 'ger.1', footballData: 'BL1', apiFootball: 78 },
+  },
+  {
+    id: 'ligue1', name: 'Ligue 1', country: 'Francia', flag: '🇫🇷',
+    sources: { espn: 'fra.1', footballData: 'FL1', apiFootball: 61 },
+  },
+
+  // ── Competiciones Europeas de Clubes (UEFA) ──
   {
     id: 'ucl', name: 'Champions League', country: 'Europa', flag: '🇪🇺',
     sources: { espn: 'uefa.champions', footballData: 'CL', apiFootball: 2 },
@@ -25,6 +53,61 @@ export const leagueCatalog: CatalogEntry[] = [
     id: 'conf', name: 'Conference League', country: 'Europa', flag: '🇪🇺',
     sources: { espn: 'uefa.europa.conf', apiFootball: 848 },
   },
+
+  // ── 2ª Categoría: Segundas Divisiones (España primero) ──
+  {
+    id: 'segunda', name: '2ª División (LaLiga Hypermotion)', country: 'España', flag: '🇪🇸',
+    sources: { espn: 'esp.2', footballData: 'SD', apiFootball: 141 },
+  },
+  {
+    id: 'championship', name: 'Championship (2ª inglesa)', country: 'Inglaterra', flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿',
+    sources: { espn: 'eng.2', footballData: 'ELC', apiFootball: 40 },
+  },
+
+  // ── 3ª Categoría: Terceras Divisiones (España primero) ──
+  {
+    id: 'primera_rfef', name: '1ª RFEF (Primera Federación)', country: 'España', flag: '🇪🇸',
+    sources: { espn: 'rfef.1' },
+  },
+  {
+    id: 'league_one', name: 'League One (3ª inglesa)', country: 'Inglaterra', flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿',
+    sources: { espn: 'eng.3', apiFootball: 41 },
+  },
+
+  // ── 4ª Categoría: Cuartas Divisiones (España primero) ──
+  {
+    id: 'segunda_rfef', name: '2ª RFEF (Segunda Federación)', country: 'España', flag: '🇪🇸',
+    sources: { espn: 'rfef.2' },
+  },
+  {
+    id: 'league_two', name: 'League Two (4ª inglesa)', country: 'Inglaterra', flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿',
+    sources: { espn: 'eng.4', apiFootball: 42 },
+  },
+
+  // ── 5ª Categoría: Quintas Divisiones (España primero) ──
+  {
+    id: 'tercera_rfef', name: '3ª RFEF (Tercera Federación)', country: 'España', flag: '🇪🇸',
+    sources: { espn: 'rfef.3' },
+  },
+
+  // ── Copas Nacionales (España primero) ──
+  {
+    id: 'copadelrey', name: 'Copa del Rey', country: 'España', flag: '🇪🇸',
+    sources: { espn: 'esp.copa_del_rey', apiFootball: 143 },
+  },
+  {
+    id: 'eflcup', name: 'EFL Cup', country: 'Inglaterra', flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿',
+    sources: { espn: 'eng.league_cup', apiFootball: 48 },
+  },
+  {
+    id: 'coppaitalia', name: 'Coppa Italia', country: 'Italia', flag: '🇮🇹',
+    sources: { espn: 'ita.coppa_italia', apiFootball: 137 },
+  },
+  {
+    id: 'dfbpokal', name: 'DFB-Pokal', country: 'Alemania', flag: '🇩🇪',
+    sources: { espn: 'ger.dfb_pokal', apiFootball: 81 },
+  },
+
   // ── Competiciones de Selecciones Nacionales ──
   {
     id: 'worldcup', name: 'Mundial FIFA', country: 'Selecciones', flag: '🌍',
@@ -54,70 +137,8 @@ export const leagueCatalog: CatalogEntry[] = [
     id: 'friendly', name: 'Amistosos Internacionales', country: 'Selecciones', flag: '🌐',
     sources: { espn: 'fifa.friendly', apiFootball: 10 },
   },
-  {
-    id: 'laliga', name: 'LaLiga', country: 'España', flag: '🇪🇸',
-    sources: { espn: 'esp.1', footballData: 'PD', apiFootball: 140 },
-  },
-  {
-    id: 'segunda', name: '2ª División (LaLiga Hypermotion)', country: 'España', flag: '🇪🇸',
-    sources: { espn: 'esp.2', footballData: 'SD', apiFootball: 141 },
-  },
-  {
-    id: 'primera_rfef', name: '1ª RFEF (Primera Federación)', country: 'España', flag: '🇪🇸',
-    sources: { espn: 'rfef.1' },
-  },
-  {
-    id: 'segunda_rfef', name: '2ª RFEF (Segunda Federación)', country: 'España', flag: '🇪🇸',
-    sources: { espn: 'rfef.2' },
-  },
-  {
-    id: 'tercera_rfef', name: '3ª RFEF (Tercera Federación)', country: 'España', flag: '🇪🇸',
-    sources: { espn: 'rfef.3' },
-  },
-  {
-    id: 'copadelrey', name: 'Copa del Rey', country: 'España', flag: '🇪🇸',
-    sources: { espn: 'esp.copa_del_rey', apiFootball: 143 },
-  },
-  {
-    id: 'premier', name: 'Premier League', country: 'Inglaterra', flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿',
-    sources: { espn: 'eng.1', footballData: 'PL', apiFootball: 39 },
-  },
-  {
-    id: 'championship', name: 'Championship (2ª inglesa)', country: 'Inglaterra', flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿',
-    sources: { espn: 'eng.2', footballData: 'ELC', apiFootball: 40 },
-  },
-  {
-    id: 'league_one', name: 'League One (3ª inglesa)', country: 'Inglaterra', flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿',
-    sources: { espn: 'eng.3', apiFootball: 41 },
-  },
-  {
-    id: 'league_two', name: 'League Two (4ª inglesa)', country: 'Inglaterra', flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿',
-    sources: { espn: 'eng.4', apiFootball: 42 },
-  },
-  {
-    id: 'eflcup', name: 'EFL Cup', country: 'Inglaterra', flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿',
-    sources: { espn: 'eng.league_cup', apiFootball: 48 },
-  },
-  {
-    id: 'seriea', name: 'Serie A', country: 'Italia', flag: '🇮🇹',
-    sources: { espn: 'ita.1', footballData: 'SA', apiFootball: 135 },
-  },
-  {
-    id: 'coppaitalia', name: 'Coppa Italia', country: 'Italia', flag: '🇮🇹',
-    sources: { espn: 'ita.coppa_italia', apiFootball: 137 },
-  },
-  {
-    id: 'bundesliga', name: 'Bundesliga', country: 'Alemania', flag: '🇩🇪',
-    sources: { espn: 'ger.1', footballData: 'BL1', apiFootball: 78 },
-  },
-  {
-    id: 'dfbpokal', name: 'DFB-Pokal', country: 'Alemania', flag: '🇩🇪',
-    sources: { espn: 'ger.dfb_pokal', apiFootball: 81 },
-  },
-  {
-    id: 'ligue1', name: 'Ligue 1', country: 'Francia', flag: '🇫🇷',
-    sources: { espn: 'fra.1', footballData: 'FL1', apiFootball: 61 },
-  },
+
+  // ── Otras Primeras Divisiones Internacionales ──
   {
     id: 'arg1', name: 'Liga Profesional', country: 'Argentina', flag: '🇦🇷',
     sources: { espn: 'arg.1', apiFootball: 128 },

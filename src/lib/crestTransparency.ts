@@ -25,15 +25,20 @@ export function normalizeCrestUrl(url?: string): string | undefined {
   return url
 }
 
-/** Comprueba si un píxel RGBA es blanco, blanco roto o gris muy claro neutro (marco de fondo). */
+/** Comprueba si un píxel RGBA es blanco, blanco roto, cuantizado cálido/frío o gris claro neutro. */
 export function isNearWhite(r: number, g: number, b: number, a: number, threshold = 232): boolean {
   if (a < 30) return false // Ya es transparente
   if (r >= threshold && g >= threshold && b >= threshold) return true
   if (threshold <= 232) {
     const min = Math.min(r, g, b)
     const max = Math.max(r, g, b)
-    // Captura fondos blanco roto o gris muy claro sin saturación típicos de escudos comprimidos
-    if (min >= 216 && max - min <= 16) return true
+    const diff = max - min
+    // Gris claro neutro
+    if (min >= 205 && diff <= 20) return true
+    // Blancos cálidos/fríos tintados por paleta PNG de 256 colores o artefactos JPEG
+    const sum = r + g + b
+    if (max >= 236 && min >= 196 && sum >= 672 && diff <= 58) return true
+    if (max >= 228 && min >= 208 && sum >= 666 && diff <= 36) return true
   }
   return false
 }
@@ -68,8 +73,9 @@ function edgeHasSignificantWhite(
  * Convierte en transparente todo el marco exterior blanco conectado al perímetro de la imagen
  * utilizando un recorrido en anchura (BFS / Flood Fill).
  *
- * Detecta el recuadro aunque exista un pequeño margen exterior transparente o bordes redondeados,
- * se detiene ante los bordes y trazos del escudo, y suaviza el halo anti-aliasing en la frontera.
+ * Detecta el recuadro aunque exista margen exterior transparente, bordes redondeados,
+ * marcos exteriores de 1–3 px o tintes de paleta PNG/JPEG, se detiene ante los trazos del
+ * escudo y suaviza en dos pasadas el halo anti-aliasing sobre la frontera.
  *
  * @returns true si se eliminó un marco blanco, false si la imagen ya era transparente o sin marco blanco
  */
@@ -104,47 +110,110 @@ export function floodFillTransparentBackground(
 
   const boxW = maxX - minX + 1
   const boxH = maxY - minY + 1
-  const maxCornerProbe = Math.min(4, Math.floor(Math.min(boxW, boxH) / 4))
+  const isRealCrest = boxW >= 20 && boxH >= 20
 
-  // 2. Comprobar las 4 esquinas del rectángulo opaco.
-  // Si el primer píxel opaco de la esquina es casi blanco, cuenta como esquina de recuadro blanco.
-  const corners: [number, number, number, number][] = [
-    [minX, minY, 1, 1],
-    [maxX, minY, -1, 1],
-    [minX, maxY, 1, -1],
-    [maxX, maxY, -1, -1],
-  ]
+  const isPixelWhite = (x: number, y: number) => {
+    const idx = (y * width + x) * 4
+    return isNearWhite(data[idx], data[idx + 1], data[idx + 2], data[idx + 3], threshold)
+  }
 
-  let whiteCorners = 0
-  for (const [cx, cy, sx, sy] of corners) {
-    const exactIdx = (cy * width + cx) * 4
-    if (isNearWhite(data[exactIdx], data[exactIdx + 1], data[exactIdx + 2], data[exactIdx + 3], threshold)) {
-      whiteCorners++
-      continue
+  // 2. Detectar el recuadro blanco evaluando inset = 0 (y 1..3 en imágenes reales con marco exterior)
+  const maxInset = isRealCrest ? 3 : 0
+  let matchedInset = -1
+
+  for (let inset = 0; inset <= maxInset; inset++) {
+    const iMinX = minX + inset
+    const iMaxX = maxX - inset
+    const iMinY = minY + inset
+    const iMaxY = maxY - inset
+    if (iMinX >= iMaxX || iMinY >= iMaxY) break
+
+    const curW = iMaxX - iMinX + 1
+    const curH = iMaxY - iMinY + 1
+    const maxCornerProbe = Math.min(4, Math.floor(Math.min(curW, curH) / 4))
+
+    const corners: [number, number, number, number][] = [
+      [iMinX, iMinY, 1, 1],
+      [iMaxX, iMinY, -1, 1],
+      [iMinX, iMaxY, 1, -1],
+      [iMaxX, iMaxY, -1, -1],
+    ]
+
+    let whiteCorners = 0
+    for (const [cx, cy, sx, sy] of corners) {
+      const exactIdx = (cy * width + cx) * 4
+      if (
+        isNearWhite(data[exactIdx], data[exactIdx + 1], data[exactIdx + 2], data[exactIdx + 3], threshold)
+      ) {
+        whiteCorners++
+        continue
+      }
+
+      // Tolerancia para recuadros blancos con esquinas ligeramente redondeadas (hasta 4px transparentes)
+      if (data[exactIdx + 3] < 30 && maxCornerProbe > 0) {
+        for (let d = 1; d <= maxCornerProbe; d++) {
+          const px = cx + sx * d
+          const py = cy + sy * d
+          const pIdx = (py * width + px) * 4
+          if (data[pIdx + 3] < 30) continue
+          if (
+            isNearWhite(data[pIdx], data[pIdx + 1], data[pIdx + 2], data[pIdx + 3], threshold) &&
+            (edgeHasSignificantWhite(data, width, iMinX, cy, 1, 0, curW, threshold) ||
+              edgeHasSignificantWhite(data, width, cx, iMinY, 0, 1, curH, threshold))
+          ) {
+            whiteCorners++
+          }
+          break
+        }
+      }
     }
 
-    // Tolerancia para recuadros blancos con esquinas ligeramente redondeadas (hasta 4px transparentes)
-    if (data[exactIdx + 3] < 30 && maxCornerProbe > 0) {
-      for (let d = 1; d <= maxCornerProbe; d++) {
-        const px = cx + sx * d
-        const py = cy + sy * d
-        const pIdx = (py * width + px) * 4
-        if (data[pIdx + 3] < 30) continue
-        if (
-          isNearWhite(data[pIdx], data[pIdx + 1], data[pIdx + 2], data[pIdx + 3], threshold) &&
-          (edgeHasSignificantWhite(data, width, minX, cy, 1, 0, boxW, threshold) ||
-            edgeHasSignificantWhite(data, width, cx, minY, 0, 1, boxH, threshold))
-        ) {
-          whiteCorners++
-        }
+    if (whiteCorners >= 2) {
+      matchedInset = inset
+      break
+    }
+
+    if (isRealCrest && whiteCorners >= 1) {
+      let perimTotal = 0
+      let perimWhite = 0
+      for (let x = iMinX; x <= iMaxX; x++) {
+        perimTotal += 2
+        if (isPixelWhite(x, iMinY)) perimWhite++
+        if (isPixelWhite(x, iMaxY)) perimWhite++
+      }
+      for (let y = iMinY + 1; y < iMaxY; y++) {
+        perimTotal += 2
+        if (isPixelWhite(iMinX, y)) perimWhite++
+        if (isPixelWhite(iMaxX, y)) perimWhite++
+      }
+      if (perimTotal > 0 && perimWhite / perimTotal >= 0.35) {
+        matchedInset = inset
         break
       }
     }
   }
 
-  // Si menos de 2 esquinas son blancas, no es una imagen con recuadro blanco opaco
-  if (whiteCorners < 2) {
+  if (matchedInset < 0) {
     return false
+  }
+
+  // Eliminar marco exterior de 1..3 px cuando el recuadro blanco empieza justo por dentro del borde
+  if (matchedInset > 0) {
+    const nMinX = minX + matchedInset
+    const nMaxX = maxX - matchedInset
+    const nMinY = minY + matchedInset
+    const nMaxY = maxY - matchedInset
+    for (let y = minY; y <= maxY; y++) {
+      for (let x = minX; x <= maxX; x++) {
+        if (x < nMinX || x > nMaxX || y < nMinY || y > nMaxY) {
+          data[(y * width + x) * 4 + 3] = 0
+        }
+      }
+    }
+    minX = nMinX
+    maxX = nMaxX
+    minY = nMinY
+    maxY = nMaxY
   }
 
   const totalPixels = width * height
@@ -153,17 +222,44 @@ export function floodFillTransparentBackground(
   let queueEnd = 0
   let queueStart = 0
 
+  const isBgPixel = (idx: number, x: number, y: number): boolean => {
+    const p = idx * 4
+    const r = data[p]
+    const g = data[p + 1]
+    const b = data[p + 2]
+    const a = data[p + 3]
+    if (isNearWhite(r, g, b, a, threshold)) return true
+    if (isRealCrest && a >= 30) {
+      const inCore =
+        x >= width * 0.22 && x <= width * 0.78 && y >= height * 0.22 && y <= height * 0.78
+      if (!inCore) {
+        const mn = Math.min(r, g, b)
+        const mx = Math.max(r, g, b)
+        if (mn >= 188 && mx - mn <= 18) return true
+      }
+    }
+    return false
+  }
+
+  const isLightNeutralBorder = (x: number, y: number): boolean => {
+    const p = (y * width + x) * 4
+    const a = data[p + 3]
+    if (a < 30) return true
+    const mn = Math.min(data[p], data[p + 1], data[p + 2])
+    const mx = Math.max(data[p], data[p + 1], data[p + 2])
+    return mn >= 175 && mx - mn <= 20
+  }
+
   const trySeedPixel = (x: number, y: number) => {
     const idx = y * width + x
     if (visited[idx]) return
-    const p = idx * 4
-    if (isNearWhite(data[p], data[p + 1], data[p + 2], data[p + 3], threshold)) {
+    if (isBgPixel(idx, x, y)) {
       visited[idx] = 1
       queue[queueEnd++] = idx
     }
   }
 
-  // 3. Añadir a la cola todos los píxeles casi blancos del perímetro del recuadro opaco
+  // 3. Añadir a la cola todos los píxeles de fondo del perímetro del recuadro opaco
   for (let x = minX; x <= maxX; x++) {
     trySeedPixel(x, minY)
     trySeedPixel(x, maxY)
@@ -173,7 +269,18 @@ export function floodFillTransparentBackground(
     trySeedPixel(maxX, y)
   }
 
-  if (queueEnd === 0) return false
+  if (isRealCrest && maxX - minX >= 2 && maxY - minY >= 2) {
+    for (let x = minX + 1; x <= maxX - 1; x++) {
+      if (matchedInset > 0 || isLightNeutralBorder(x, minY)) trySeedPixel(x, minY + 1)
+      if (matchedInset > 0 || isLightNeutralBorder(x, maxY)) trySeedPixel(x, maxY - 1)
+    }
+    for (let y = minY + 1; y <= maxY - 1; y++) {
+      if (matchedInset > 0 || isLightNeutralBorder(minX, y)) trySeedPixel(minX + 1, y)
+      if (matchedInset > 0 || isLightNeutralBorder(maxX, y)) trySeedPixel(maxX - 1, y)
+    }
+  }
+
+  if (queueEnd === 0 && matchedInset === 0) return false
 
   // 4. Propagar el flood-fill hacia adentro haciendo transparentes los píxeles conectados
   while (queueStart < queueEnd) {
@@ -183,55 +290,102 @@ export function floodFillTransparentBackground(
 
     data[curr * 4 + 3] = 0
 
-    const tryPush = (next: number) => {
+    const tryPush = (next: number, nx: number, ny: number) => {
       if (visited[next]) return
-      const nextP = next * 4
-      if (isNearWhite(data[nextP], data[nextP + 1], data[nextP + 2], data[nextP + 3], threshold)) {
+      if (isBgPixel(next, nx, ny)) {
         visited[next] = 1
         queue[queueEnd++] = next
       }
     }
 
-    if (cx > minX) tryPush(curr - 1)
-    if (cx < maxX) tryPush(curr + 1)
-    if (cy > minY) tryPush(curr - width)
-    if (cy < maxY) tryPush(curr + width)
+    if (cx > minX) tryPush(curr - 1, cx - 1, cy)
+    if (cx < maxX) tryPush(curr + 1, cx + 1, cy)
+    if (cy > minY) tryPush(curr - width, cx, cy - 1)
+    if (cy < maxY) tryPush(curr + width, cx, cy + 1)
   }
 
-  // 5. Suavizar el borde anti-aliasing pegado al fondo eliminado para quitar halos blancos en modo oscuro
+  // 5. Dos pasadas de suavizado anti-aliasing para eliminar halos en modo oscuro
+  const featheredCleared = new Uint8Array(totalPixels)
+  const pass1Cleared: number[] = []
+
+  const featherPass1 = (next: number) => {
+    if (visited[next] || featheredCleared[next]) return
+    const p = next * 4
+    const a = data[p + 3]
+    if (a < 30) return
+    const r = data[p]
+    const g = data[p + 1]
+    const b = data[p + 2]
+    const minRgb = Math.min(r, g, b)
+    const maxRgb = Math.max(r, g, b)
+    const diff = maxRgb - minRgb
+    const sum = r + g + b
+    if ((minRgb >= 185 && diff <= 30) || (sum >= 645 && minRgb >= 185 && diff <= 48)) {
+      data[p + 3] = 0
+      featheredCleared[next] = 1
+      pass1Cleared.push(next)
+    } else if (minRgb >= 150 && diff <= 32) {
+      const factor = Math.max(0, (190 - minRgb) / 50)
+      data[p + 3] = Math.min(a, Math.round(a * factor))
+    }
+  }
+
   for (let i = 0; i < queueEnd; i++) {
     const curr = queue[i]
     const cx = curr % width
     const cy = (curr / width) | 0
 
-    const featherNeighbor = (next: number) => {
-      if (visited[next]) return
-      const p = next * 4
-      const a = data[p + 3]
-      if (a < 30) return
-      const r = data[p]
-      const g = data[p + 1]
-      const b = data[p + 2]
-      const minRgb = Math.min(r, g, b)
-      const maxRgb = Math.max(r, g, b)
-      if (minRgb >= 192 && maxRgb - minRgb <= 22) {
-        if (minRgb >= 210 && maxRgb - minRgb <= 14) {
-          data[p + 3] = 0
-        } else {
-          const factor = Math.max(0, (226 - minRgb) / 36)
-          data[p + 3] = Math.min(a, Math.round(a * factor))
-        }
-      }
+    if (cx > minX) featherPass1(curr - 1)
+    if (cx < maxX) featherPass1(curr + 1)
+    if (cy > minY) featherPass1(curr - width)
+    if (cy < maxY) featherPass1(curr + width)
+    if (isRealCrest) {
+      if (cx > minX && cy > minY) featherPass1(curr - width - 1)
+      if (cx < maxX && cy > minY) featherPass1(curr - width + 1)
+      if (cx > minX && cy < maxY) featherPass1(curr + width - 1)
+      if (cx < maxX && cy < maxY) featherPass1(curr + width + 1)
     }
+  }
 
-    if (cx > minX) featherNeighbor(curr - 1)
-    if (cx < maxX) featherNeighbor(curr + 1)
-    if (cy > minY) featherNeighbor(curr - width)
-    if (cy < maxY) featherNeighbor(curr + width)
+  const featherPass2 = (next: number) => {
+    if (visited[next] || featheredCleared[next]) return
+    const p = next * 4
+    const a = data[p + 3]
+    if (a < 30) return
+    const minRgb = Math.min(data[p], data[p + 1], data[p + 2])
+    const maxRgb = Math.max(data[p], data[p + 1], data[p + 2])
+    if (minRgb >= 190 && maxRgb - minRgb <= 28) {
+      data[p + 3] = Math.min(a, Math.round(a * 0.25))
+    }
+  }
+
+  for (let i = 0; i < pass1Cleared.length; i++) {
+    const curr = pass1Cleared[i]
+    const cx = curr % width
+    const cy = (curr / width) | 0
+
+    if (cx > minX) featherPass2(curr - 1)
+    if (cx < maxX) featherPass2(curr + 1)
+    if (cy > minY) featherPass2(curr - width)
+    if (cy < maxY) featherPass2(curr + width)
   }
 
   ctx.putImageData(imgData, 0, 0)
   return true
+}
+
+function detectImageMime(bytes: Uint8Array, fallbackContentType: string): string | null {
+  if (bytes.length < 4) return null
+  if (bytes[0] === 0x3c) return null // '<' -> respuesta HTML (404 / error)
+  if (bytes[0] === 0xff && bytes[1] === 0xd8) return 'image/jpeg'
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
+    return 'image/png'
+  }
+  if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) return 'image/gif'
+  if (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46) {
+    return 'image/webp'
+  }
+  return fallbackContentType || 'image/png'
 }
 
 function loadImageElement(src: string, crossOrigin?: string): Promise<HTMLImageElement> {
@@ -264,7 +418,10 @@ async function fetchImageAsObjectUrl(
     if (typeof res.arrayBuffer === 'function') {
       const buffer = await res.arrayBuffer()
       if (!buffer || buffer.byteLength === 0) return null
-      blob = new Blob([buffer], { type: contentType })
+      const bytes = new Uint8Array(buffer)
+      const mime = detectImageMime(bytes, contentType)
+      if (!mime) return null
+      blob = new Blob([bytes], { type: mime })
     } else if (typeof res.blob === 'function') {
       blob = await res.blob()
       if (!blob || blob.size === 0) return null

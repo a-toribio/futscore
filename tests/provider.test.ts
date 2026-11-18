@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { toDateKey } from '@/lib/date'
+import { leagues } from '@/services/leagueCatalog'
 import { createMockMatchesProvider } from '@/services/mock/mockMatchesProvider'
 
 function setup() {
@@ -17,7 +18,7 @@ describe('mockMatchesProvider', () => {
   it('agrupa por liga y solo devuelve ligas con partidos', async () => {
     const { provider, today } = setup()
     const groups = await provider.getMatchesByDate({ date: today })
-    expect(groups.map((g) => g.league.id)).toEqual(['ucl', 'laliga', 'premier', 'seriea', 'bundesliga', 'ligue1'])
+    expect(groups.map((g) => g.league.id)).toEqual(['laliga', 'premier', 'seriea', 'bundesliga', 'ligue1', 'ucl'])
     for (const g of groups) expect(g.matches.every((m) => m.leagueId === g.league.id)).toBe(true)
   })
 
@@ -46,5 +47,14 @@ describe('mockMatchesProvider', () => {
     expect((await provider.getLiveMatches()).some((m) => m.id === 't9')).toBe(false)
     advance(30_000)
     expect((await provider.getLiveMatches()).some((m) => m.id === 't9')).toBe(true)
+  })
+
+  it('ordena las ligas priorizando las 5 grandes ligas e inferiores con la española primera en cada categoría', () => {
+    const ids = leagues.map((l) => l.id)
+    expect(ids.slice(0, 5)).toEqual(['laliga', 'premier', 'seriea', 'bundesliga', 'ligue1'])
+    expect(ids.indexOf('segunda')).toBeLessThan(ids.indexOf('championship'))
+    expect(ids.indexOf('primera_rfef')).toBeLessThan(ids.indexOf('league_one'))
+    expect(ids.indexOf('segunda_rfef')).toBeLessThan(ids.indexOf('league_two'))
+    expect(ids.indexOf('copadelrey')).toBeLessThan(ids.indexOf('eflcup'))
   })
 })
