@@ -1,11 +1,79 @@
-import { useEffect, useState } from 'react'
-import { toFutbolmeUrl } from './runtime'
+import { useEffect, useSyncExternalStore } from 'react'
+import { isNativeApp, toFutbolmeUrl } from './runtime'
 
 /** Caché global de escudos procesados con fondo transparente */
 const transparentCache = new Map<string, string>()
 
+/** Suscriptores reactivos por URL normalizada para actualizar al instante cualquier `<TeamCrest>` */
+const cacheListeners = new Map<string, Set<() => void>>()
+
 /** Promesas en vuelo para no procesar el mismo escudo dos veces en paralelo */
 const inFlightRequests = new Map<string, Promise<string>>()
+
+/** Límite de descargas concurrentes para evitar saturar `futbolme.com` o el proxy */
+const MAX_CONCURRENT_CREST_FETCHES = 6
+let activeCrestFetches = 0
+const crestFetchQueue: (() => void)[] = []
+
+function acquireCrestFetchSlot(): Promise<void> {
+  if (activeCrestFetches < MAX_CONCURRENT_CREST_FETCHES) {
+    activeCrestFetches++
+    return Promise.resolve()
+  }
+  return new Promise((resolve) => {
+    crestFetchQueue.push(() => {
+      activeCrestFetches++
+      resolve()
+    })
+  })
+}
+
+function releaseCrestFetchSlot(): void {
+  activeCrestFetches = Math.max(0, activeCrestFetches - 1)
+  const next = crestFetchQueue.shift()
+  next?.()
+}
+
+function setTransparentCache(url: string, result: string): void {
+  transparentCache.set(url, result)
+  const listeners = cacheListeners.get(url)
+  if (listeners) {
+    for (const listener of listeners) {
+      listener()
+    }
+  }
+}
+
+function subscribeCrestCache(url: string | undefined, onStoreChange: () => void): () => void {
+  if (!url) return () => {}
+  let listeners = cacheListeners.get(url)
+  if (!listeners) {
+    listeners = new Set()
+    cacheListeners.set(url, listeners)
+  }
+  listeners.add(onStoreChange)
+  return () => {
+    const current = cacheListeners.get(url)
+    if (!current) return
+    current.delete(onStoreChange)
+    if (current.size === 0) {
+      cacheListeners.delete(url)
+    }
+  }
+}
+
+function isTransparencyCandidate(url: string): boolean {
+  if (url.startsWith('data:')) return false
+  return (
+    url.includes('futbolme') ||
+    url.includes('/api/futbolme') ||
+    /\.(png|jpe?g|webp)(\?.*)?$/i.test(url)
+  )
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
 
 /**
  * Normaliza URLs de escudos (especialmente de futbolme) para que en el navegador
@@ -158,8 +226,8 @@ export function floodFillTransparentBackground(
           if (data[pIdx + 3] < 30) continue
           if (
             isNearWhite(data[pIdx], data[pIdx + 1], data[pIdx + 2], data[pIdx + 3], threshold) &&
-            (edgeHasSignificantWhite(data, width, iMinX, cy, 1, 0, curW, threshold) ||
-              edgeHasSignificantWhite(data, width, cx, iMinY, 0, 1, curH, threshold))
+            (edgeHasSignificantWhite(data, width, iMinX, py, 1, 0, curW, threshold) ||
+              edgeHasSignificantWhite(data, width, px, iMinY, 0, 1, curH, threshold))
           ) {
             whiteCorners++
           }
@@ -438,8 +506,67 @@ async function fetchImageAsObjectUrl(
   }
 }
 
+function renderTransparentCanvas(img: HTMLImageElement, normalized: string): string {
+  const width = img.naturalWidth || img.width
+  const height = img.naturalHeight || img.height
+  if (width <= 0 || height <= 0) {
+    return normalized
+  }
+
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  if (!ctx) {
+    return normalized
+  }
+
+  ctx.drawImage(img, 0, 0)
+  const changed = floodFillTransparentBackground(ctx, width, height)
+  return changed ? canvas.toDataURL('image/png') : normalized
+}
+
+async function loadCrestImageOnce(
+  normalized: string,
+): Promise<{ img: HTMLImageElement; revoke?: () => void }> {
+  const fetched = await fetchImageAsObjectUrl(normalized)
+  if (fetched) {
+    try {
+      const img = await loadImageElement(fetched.src)
+      return { img, revoke: fetched.revoke }
+    } catch {
+      fetched.revoke()
+    }
+  }
+  const img = await loadImageElement(normalized, 'anonymous')
+  return { img }
+}
+
 /**
- * Carga una imagen vía fetch nativo/proxy (evitando bloqueos CORS en WebView de Android y navegador),
+ * Procesa de forma síncrona un `<img>` ya cargado en el navegador (mismo origen o CORS abierto),
+ * eliminando el recuadro blanco exterior con cero peticiones HTTP adicionales y actualizando la caché reactiva.
+ */
+export function processLoadedCrestImage(img: HTMLImageElement, rawUrl?: string): void {
+  const normalized = normalizeCrestUrl(rawUrl) ?? rawUrl
+  if (!normalized || transparentCache.has(normalized) || !isTransparencyCandidate(normalized)) {
+    return
+  }
+  if (typeof document === 'undefined') return
+  const width = img.naturalWidth || img.width
+  const height = img.naturalHeight || img.height
+  if (width <= 0 || height <= 0) return
+
+  try {
+    const result = renderTransparentCanvas(img, normalized)
+    setTransparentCache(normalized, result)
+  } catch {
+    // Imagen cross-origin sin CORS en navegador/WebView: procesamos en segundo plano con cola y reintentos
+    void makeCrestBackgroundTransparent(normalized)
+  }
+}
+
+/**
+ * Carga una imagen vía fetch nativo/proxy con concurrencia limitada y reintentos,
  * detecta si tiene un recuadro blanco exterior y lo remueve devolviendo una Data URL PNG transparente.
  */
 export async function makeCrestBackgroundTransparent(url: string): Promise<string> {
@@ -458,49 +585,38 @@ export async function makeCrestBackgroundTransparent(url: string): Promise<strin
   }
 
   const promise = (async () => {
+    let slotAcquired = false
     let revoke: (() => void) | undefined
     try {
-      const fetched = await fetchImageAsObjectUrl(normalized)
-      let img: HTMLImageElement
-      if (fetched) {
-        revoke = fetched.revoke
-        img = await loadImageElement(fetched.src)
-      } else {
-        img = await loadImageElement(normalized, 'anonymous')
+      await acquireCrestFetchSlot()
+      slotAcquired = true
+
+      const maxAttempts = 3 // intento inicial + hasta 2 reintentos
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          const loaded = await loadCrestImageOnce(normalized)
+          revoke = loaded.revoke
+          const result = renderTransparentCanvas(loaded.img, normalized)
+          setTransparentCache(normalized, result)
+          return result
+        } catch (err) {
+          revoke?.()
+          revoke = undefined
+          if (attempt >= maxAttempts) {
+            throw err
+          }
+          await sleep(400 * attempt)
+        }
       }
-
-      const width = img.naturalWidth || img.width
-      const height = img.naturalHeight || img.height
-      if (width <= 0 || height <= 0) {
-        transparentCache.set(normalized, normalized)
-        return normalized
-      }
-
-      const canvas = document.createElement('canvas')
-      canvas.width = width
-      canvas.height = height
-      const ctx = canvas.getContext('2d', { willReadFrequently: true })
-      if (!ctx) {
-        transparentCache.set(normalized, normalized)
-        return normalized
-      }
-
-      ctx.drawImage(img, 0, 0)
-      const changed = floodFillTransparentBackground(ctx, width, height)
-
-      if (changed) {
-        const transparentDataUrl = canvas.toDataURL('image/png')
-        transparentCache.set(normalized, transparentDataUrl)
-        return transparentDataUrl
-      }
-
-      transparentCache.set(normalized, normalized)
       return normalized
     } catch {
-      // Si falla la descarga o la lectura de píxeles, devolvemos la URL original sin envenenar la caché
+      // Si falla la descarga o la lectura de píxeles tras reintentar, devolvemos la URL original sin envenenar la caché
       return normalized
     } finally {
       revoke?.()
+      if (slotAcquired) {
+        releaseCrestFetchSlot()
+      }
       inFlightRequests.delete(normalized)
     }
   })()
@@ -515,44 +631,32 @@ export async function makeCrestBackgroundTransparent(url: string): Promise<strin
  */
 export function useTransparentCrest(rawUrl?: string): string | undefined {
   const normalized = normalizeCrestUrl(rawUrl)
-  const [processed, setProcessed] = useState<{ url: string; result: string } | null>(null)
 
-  const cached = normalized ? transparentCache.get(normalized) : undefined
-  const asyncUrl = processed !== null && processed.url === normalized ? processed.result : undefined
-  const crestUrl = cached ?? asyncUrl ?? normalized
+  const cached = useSyncExternalStore(
+    (onStoreChange) => subscribeCrestCache(normalized, onStoreChange),
+    () => (normalized ? transparentCache.get(normalized) : undefined),
+    () => undefined,
+  )
 
   useEffect(() => {
-    if (!normalized || transparentCache.has(normalized)) {
+    if (!normalized || cached !== undefined || !isTransparencyCandidate(normalized)) {
       return
     }
 
-    // Comprobamos si la imagen proviene de futbolme o termina en extensión de imagen típica
-    const isCandidate =
-      normalized.includes('futbolme') ||
-      normalized.includes('/api/futbolme') ||
-      /\.(png|jpe?g)(\?.*)?$/i.test(normalized)
-
-    if (!isCandidate) {
-      return
+    // En navegador con proxy local `/api/futbolme`, `<TeamCrest onLoad>` procesa síncronamente sin
+    // peticiones extra en el arranque; diferimos un respaldo breve por si no pasase por `onLoad`.
+    const deferMs = !isNativeApp() && normalized.startsWith('/api/futbolme') ? 1500 : 0
+    if (deferMs > 0) {
+      const timer = window.setTimeout(() => {
+        if (!transparentCache.has(normalized)) {
+          void makeCrestBackgroundTransparent(normalized)
+        }
+      }, deferMs)
+      return () => window.clearTimeout(timer)
     }
 
-    let isMounted = true
-    makeCrestBackgroundTransparent(normalized)
-      .then((result) => {
-        if (isMounted) {
-          setProcessed({ url: normalized, result })
-        }
-      })
-      .catch(() => {
-        if (isMounted) {
-          setProcessed({ url: normalized, result: normalized })
-        }
-      })
+    void makeCrestBackgroundTransparent(normalized)
+  }, [normalized, cached])
 
-    return () => {
-      isMounted = false
-    }
-  }, [normalized])
-
-  return crestUrl
+  return cached ?? normalized
 }

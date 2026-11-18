@@ -539,20 +539,45 @@ interface CachedGroupBundle {
   promise: Promise<{
     standings: StandingRow[]
     allMatches: Match[]
+    jornadaNumber?: number
   }>
 }
 
 const groupBundleCache = new Map<string, CachedGroupBundle>()
 
+async function fetchExtraJornadasMatches(
+  leagueId: string,
+  group: RfefGroupConfig,
+  paths: string[],
+  fetchFn: FetchFn,
+): Promise<Match[]> {
+  if (paths.length === 0) return []
+  const extraResults = await Promise.allSettled(
+    paths.map(async (p) => {
+      const h = await fetchFutbolmeHtml(p, fetchFn)
+      return parseFutbolmeTournamentHtml(h, leagueId, group)
+    }),
+  )
+  const matches: Match[] = []
+  for (const r of extraResults) {
+    if (r.status === 'fulfilled') {
+      for (const item of r.value.matches) {
+        matches.push(item.match)
+      }
+    }
+  }
+  return matches
+}
+
 /**
- * Carga y cachea para un grupo RFEF su clasificación y los partidos tanto de la jornada actual
- * como de la jornada siguiente/anterior para cubrir fechas pasadas y próximas.
+ * Carga y cachea para un grupo RFEF su clasificación y los partidos de la jornada actual
+ * más la jornada anterior y siguiente, evitando saturar `futbolme.com` al iniciar la app.
  */
 async function loadGroupBundle(
   leagueId: string,
   group: RfefGroupConfig,
   fetchFn: FetchFn = fetch,
-): Promise<{ standings: StandingRow[]; allMatches: Match[] }> {
+): Promise<{ standings: StandingRow[]; allMatches: Match[]; jornadaNumber?: number }> {
   const cacheKey = `${leagueId}:${group.code}`
   const now = Date.now()
   const hit = groupBundleCache.get(cacheKey)
@@ -563,53 +588,32 @@ async function loadGroupBundle(
     const mainHtml = await fetchFutbolmeHtml(mainPath, fetchFn)
     const mainParsed = parseFutbolmeTournamentHtml(mainHtml, leagueId, group)
 
-    const allExtras: ParsedRfefMatchExtra[] = [...mainParsed.matches]
-
-    // Cargamos jornadas previas y posteriores para disponer de un amplio calendario de partidos
     const basePrefix = `/resultados-directo/torneo/${group.tournamentSlug}/${group.tournamentId}/jornada/`
     const extraPaths: string[] = []
 
-    if (mainParsed.jornadaNumber) {
+    if (mainParsed.prevJornadaPath) extraPaths.push(mainParsed.prevJornadaPath)
+    if (mainParsed.nextJornadaPath) extraPaths.push(mainParsed.nextJornadaPath)
+    if (extraPaths.length === 0 && mainParsed.jornadaNumber) {
       const currentJ = mainParsed.jornadaNumber
-      for (let offset = -3; offset <= 3; offset++) {
-        if (offset !== 0) {
-          const j = currentJ + offset
-          if (j >= 1 && j <= 38) {
-            extraPaths.push(`${basePrefix}${j}`)
-          }
-        }
-      }
-    } else {
-      if (mainParsed.nextJornadaPath) extraPaths.push(mainParsed.nextJornadaPath)
-      if (mainParsed.prevJornadaPath) extraPaths.push(mainParsed.prevJornadaPath)
+      if (currentJ > 1) extraPaths.push(`${basePrefix}${currentJ - 1}`)
+      if (currentJ < 38) extraPaths.push(`${basePrefix}${currentJ + 1}`)
     }
 
-    if (extraPaths.length > 0) {
-      const extraResults = await Promise.allSettled(
-        extraPaths.map(async (p) => {
-          const h = await fetchFutbolmeHtml(p, fetchFn)
-          return parseFutbolmeTournamentHtml(h, leagueId, group)
-        }),
-      )
-      for (const r of extraResults) {
-        if (r.status === 'fulfilled') {
-          allExtras.push(...r.value.matches)
-        }
-      }
-    }
+    const extraMatches = await fetchExtraJornadasMatches(leagueId, group, extraPaths, fetchFn)
 
     const seen = new Set<string>()
     const allMatches: Match[] = []
-    for (const item of allExtras) {
-      if (!seen.has(item.match.id)) {
-        seen.add(item.match.id)
-        allMatches.push(item.match)
+    for (const match of [...mainParsed.matches.map((m) => m.match), ...extraMatches]) {
+      if (!seen.has(match.id)) {
+        seen.add(match.id)
+        allMatches.push(match)
       }
     }
 
     return {
       standings: mainParsed.standings,
       allMatches,
+      jornadaNumber: mainParsed.jornadaNumber,
     }
   }
 
@@ -706,12 +710,33 @@ export async function fetchRfefLeagueMatches(
   }
 
   const bundle = await loadGroupBundle(leagueId, selectedGroup, fetchFn)
+  const seen = new Set<string>(bundle.allMatches.map((m) => m.id))
+  const mergedMatches = [...bundle.allMatches]
 
-  const pastMatches = bundle.allMatches
+  // Al abrir la pestaña Partidos de un grupo concreto ampliamos el rango de jornadas bajo demanda
+  if (bundle.jornadaNumber) {
+    const basePrefix = `/resultados-directo/torneo/${selectedGroup.tournamentSlug}/${selectedGroup.tournamentId}/jornada/`
+    const extraPaths: string[] = []
+    for (const offset of [-3, -2, 2, 3]) {
+      const j = bundle.jornadaNumber + offset
+      if (j >= 1 && j <= 38) {
+        extraPaths.push(`${basePrefix}${j}`)
+      }
+    }
+    const extraMatches = await fetchExtraJornadasMatches(leagueId, selectedGroup, extraPaths, fetchFn)
+    for (const m of extraMatches) {
+      if (!seen.has(m.id)) {
+        seen.add(m.id)
+        mergedMatches.push(m)
+      }
+    }
+  }
+
+  const pastMatches = mergedMatches
     .filter((m) => m.status === 'finished')
     .sort((a, b) => Date.parse(b.kickoff) - Date.parse(a.kickoff))
 
-  const upcomingMatches = bundle.allMatches
+  const upcomingMatches = mergedMatches
     .filter((m) => m.status !== 'finished')
     .sort((a, b) => Date.parse(a.kickoff) - Date.parse(b.kickoff))
 

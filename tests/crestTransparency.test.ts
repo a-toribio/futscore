@@ -1,9 +1,12 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   floodFillTransparentBackground,
   isNearWhite,
+  makeCrestBackgroundTransparent,
   normalizeCrestUrl,
+  processLoadedCrestImage,
 } from '../src/lib/crestTransparency'
+import { toFutbolmeUrl } from '../src/lib/runtime'
 
 describe('crestTransparency', () => {
   it('detecta correctamente píxeles blancos, blanco roto, cuantizados cálidos/fríos y casi blancos', () => {
@@ -225,5 +228,120 @@ describe('crestTransparency', () => {
     // Contorno rojo del escudo y blanco interior intactos
     expect(buffer[(8 * width + 8) * 4 + 3]).toBe(255)
     expect(buffer[(11 * width + 11) * 4 + 3]).toBe(255)
+  })
+
+  it('normaliza dobles barras en toFutbolmeUrl para web y Capacitor', () => {
+    const winObj = (globalThis as { window?: Record<string, unknown> }).window
+    vi.stubGlobal('window', {})
+    expect(toFutbolmeUrl('https://futbolme.com//static/img/club/escudo4484.png')).toBe(
+      '/api/futbolme/static/img/club/escudo4484.png',
+    )
+    expect(toFutbolmeUrl('/api/futbolme//static/img/club/escudo4484.png')).toBe(
+      '/api/futbolme/static/img/club/escudo4484.png',
+    )
+
+    vi.stubGlobal('window', { Capacitor: {} })
+    expect(toFutbolmeUrl('/api/futbolme//static/img/club/escudo4484.png')).toBe(
+      'https://futbolme.com/static/img/club/escudo4484.png',
+    )
+    expect(toFutbolmeUrl('https://futbolme.com//static/img/club/escudo4484.png')).toBe(
+      'https://futbolme.com/static/img/club/escudo4484.png',
+    )
+    if (winObj === undefined) {
+      vi.unstubAllGlobals()
+    } else {
+      vi.stubGlobal('window', winObj)
+    }
+  })
+
+  it('procesa síncronamente un img cargado con processLoadedCrestImage y puebla la caché', async () => {
+    const width = 6
+    const height = 6
+    const buffer = new Uint8ClampedArray(width * height * 4)
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const idx = (y * width + x) * 4
+        const isShield = x >= 2 && x <= 3 && y >= 2 && y <= 3
+        buffer[idx] = isShield ? 180 : 255
+        buffer[idx + 1] = isShield ? 20 : 255
+        buffer[idx + 2] = isShield ? 20 : 255
+        buffer[idx + 3] = 255
+      }
+    }
+
+    const imgData = { data: buffer, width, height } as unknown as ImageData
+    const expectedDataUrl = 'data:image/png;base64,MOCK_TRANSPARENT_CREST'
+    const mockCtx = {
+      drawImage: vi.fn(),
+      getImageData: () => imgData,
+      putImageData: vi.fn(),
+    } as unknown as CanvasRenderingContext2D
+
+    vi.stubGlobal('document', {
+      createElement: () => ({
+        width: 0,
+        height: 0,
+        getContext: () => mockCtx,
+        toDataURL: () => expectedDataUrl,
+      }),
+    })
+
+    const fakeUrl = 'https://futbolme.com/static/img/club/escudo_test_sync.png'
+    const mockImg = {
+      naturalWidth: width,
+      naturalHeight: height,
+      width,
+      height,
+    } as unknown as HTMLImageElement
+
+    processLoadedCrestImage(mockImg, fakeUrl)
+
+    // El marco blanco de las esquinas ya debe haber pasado a alfa=0
+    expect(buffer[3]).toBe(0)
+    // Y el escudo rojo central permanece opaco
+    expect(buffer[(2 * width + 2) * 4 + 3]).toBe(255)
+    // makeCrestBackgroundTransparent debe devolver el resultado cacheado inmediatamente
+    await expect(makeCrestBackgroundTransparent(fakeUrl)).resolves.toBe(expectedDataUrl)
+  })
+
+  it('detecta recuadro blanco con esquinas redondeadas transparentes comprobando px/py reales', () => {
+    const width = 10
+    const height = 10
+    const buffer = new Uint8ClampedArray(width * height * 4)
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        // Dejar esquina extrema (0,0), (9,0), (0,9), (9,9) y borde redondeado de 1px transparentes
+        const isCornerCut =
+          (x === 0 || x === width - 1) && (y === 0 || y === height - 1)
+        const idx = (y * width + x) * 4
+        if (isCornerCut) {
+          buffer[idx + 3] = 0
+        } else if (x >= 4 && x <= 5 && y >= 4 && y <= 5) {
+          buffer[idx] = 20
+          buffer[idx + 1] = 60
+          buffer[idx + 2] = 160
+          buffer[idx + 3] = 255
+        } else {
+          buffer[idx] = 255
+          buffer[idx + 1] = 255
+          buffer[idx + 2] = 255
+          buffer[idx + 3] = 255
+        }
+      }
+    }
+
+    const imgData = { data: buffer, width, height } as unknown as ImageData
+    const mockCtx = {
+      getImageData: () => imgData,
+      putImageData: () => {},
+    } as unknown as CanvasRenderingContext2D
+
+    expect(floodFillTransparentBackground(mockCtx, width, height)).toBe(true)
+    expect(buffer[(1 * width + 1) * 4 + 3]).toBe(0)
+    expect(buffer[(4 * width + 4) * 4 + 3]).toBe(255)
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
   })
 })

@@ -1,6 +1,6 @@
 import clsx from 'clsx'
-import { useId, useState } from 'react'
-import { useTransparentCrest } from '@/lib/crestTransparency'
+import { useEffect, useId, useRef, useState } from 'react'
+import { processLoadedCrestImage, useTransparentCrest } from '@/lib/crestTransparency'
 import { resolveSpanishTeamCrest } from '@/lib/spanishCrests'
 import type { Team } from '@/types'
 
@@ -102,6 +102,7 @@ export function HeraldicShield({ team, className }: { team: Team; className?: st
 /** Escudo del equipo con imagen oficial (con eliminación de marco blanco) o escudo heráldico de respaldo. */
 export function TeamCrest({ team, className, size = 'sm' }: TeamCrestProps) {
   const [failedUrl, setFailedUrl] = useState<string | null>(null)
+  const imgRef = useRef<HTMLImageElement | null>(null)
   const defaultSize = size === 'lg' ? 'size-12' : size === 'md' ? 'size-9' : 'size-7'
   const box = clsx(defaultSize, 'shrink-0', className)
 
@@ -111,15 +112,34 @@ export function TeamCrest({ team, className, size = 'sm' }: TeamCrestProps) {
   const hasValidUrl = Boolean(activeUrl && activeUrl.trim().length > 0)
   const failed = Boolean(activeUrl && failedUrl === activeUrl)
 
+  useEffect(() => {
+    const img = imgRef.current
+    if (
+      img &&
+      img.complete &&
+      img.naturalWidth > 0 &&
+      resolvedUrl &&
+      !activeUrl?.startsWith('data:')
+    ) {
+      processLoadedCrestImage(img, resolvedUrl)
+    }
+  }, [resolvedUrl, activeUrl])
+
   if (!hasValidUrl || failed) {
     return <HeraldicShield team={team} className={box} />
   }
 
   return (
     <img
+      ref={imgRef}
       src={activeUrl}
       alt={team.name}
       loading="lazy"
+      onLoad={(e) => {
+        if (resolvedUrl && !activeUrl?.startsWith('data:')) {
+          processLoadedCrestImage(e.currentTarget, resolvedUrl)
+        }
+      }}
       onError={() => setFailedUrl(activeUrl ?? null)}
       className={clsx(box, 'object-contain drop-shadow-xs transition-opacity duration-150')}
     />

@@ -11,7 +11,11 @@ export function isNativeApp(): boolean {
 export function toFutbolmeUrl(url: string): string {
   if (typeof window === 'undefined') return url
   if (isNativeApp()) {
-    return url.replace(/^\/api\/futbolme/, 'https://futbolme.com')
+    return url
+      .replace(/^\/api\/futbolme\/+/, 'https://futbolme.com/')
+      .replace(/^https?:\/\/futbolme\.com\/+/, 'https://futbolme.com/')
   }
-  return url.replace(/^https?:\/\/futbolme\.com/, '/api/futbolme')
+  return url
+    .replace(/^https?:\/\/futbolme\.com\/+/, '/api/futbolme/')
+    .replace(/^\/api\/futbolme\/+/, '/api/futbolme/')
 }
