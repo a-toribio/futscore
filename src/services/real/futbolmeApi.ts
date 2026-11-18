@@ -1,3 +1,4 @@
+import { resolveSpanishTeamCrest } from '@/lib/spanishCrests'
 import type { FetchFn } from '@/services/errors'
 import type { Match, MatchEvent, MatchStatItem, MatchVenue, Player, TeamLineup } from '@/types'
 
@@ -68,6 +69,69 @@ function norm(s: string): string {
     .replace(/[^a-z0-9]+/g, '')
 }
 
+function normWords(s: string): string[] {
+  return s
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+}
+
+function scoreTeamSimilarity(rawEventTeam: string, candidates: (string | undefined)[]): number {
+  const evNorm = norm(rawEventTeam)
+  const evWords = normWords(rawEventTeam)
+  let best = 0
+
+  for (const candRaw of candidates) {
+    if (!candRaw) continue
+    const cNorm = norm(candRaw)
+    if (!cNorm) continue
+    if (evNorm === cNorm) return 100
+
+    const cWords = normWords(candRaw)
+    const commonWords = evWords.filter((w) => cWords.includes(w))
+    const wordScore =
+      commonWords.length > 0
+        ? (commonWords.reduce((sum, w) => sum + w.length, 0) * 60) /
+          Math.max(evNorm.length, cNorm.length)
+        : 0
+    best = Math.max(best, wordScore)
+
+    if (evNorm.length >= 4 && (cNorm.includes(evNorm) || evNorm.includes(cNorm))) {
+      const lenRatio = Math.min(evNorm.length, cNorm.length) / Math.max(evNorm.length, cNorm.length)
+      best = Math.max(best, 40 + lenRatio * 40)
+    }
+  }
+
+  return best
+}
+
+function resolveBetsapiEventIsHome(
+  rawEventTeam: string,
+  homeName: string,
+  awayName: string | undefined,
+  match: Match,
+): boolean {
+  const homeCrest = resolveSpanishTeamCrest(match.homeTeam.name, match.homeTeam.logoUrl)
+  const awayCrest = resolveSpanishTeamCrest(match.awayTeam.name, match.awayTeam.logoUrl)
+  const eventCrest = resolveSpanishTeamCrest(rawEventTeam)
+
+  if (eventCrest && homeCrest && awayCrest && homeCrest !== awayCrest) {
+    if (eventCrest === homeCrest) return true
+    if (eventCrest === awayCrest) return false
+  }
+
+  const homeCandidates = [match.homeTeam.name, match.homeTeam.shortName, homeName]
+  const awayCandidates = [match.awayTeam.name, match.awayTeam.shortName, awayName]
+
+  const homeScore = scoreTeamSimilarity(rawEventTeam, homeCandidates)
+  const awayScore = scoreTeamSimilarity(rawEventTeam, awayCandidates)
+  return homeScore >= awayScore
+}
+
 function sortValue(minute: string): number {
   const m = /(\d+)(?:\+(\d+))?/.exec(minute)
   return m ? Number(m[1]) * 100 + (m[2] ? Number(m[2]) : 0) : 9999
@@ -78,26 +142,34 @@ export function parseBetsapiCards(
   events: { id?: string; text?: string }[],
   homeName: string,
   match: Match,
+  awayName?: string,
 ): MatchEvent[] {
   const out: MatchEvent[] = []
-  const home = norm(homeName)
   for (const [i, ev] of events.entries()) {
     const text = ev.text ?? ''
-    const m = /^(\d+(?:\+\d+)?)'\s*~\s*(?:\d+(?:st|nd|rd|th)\s+)?(Yellow Card|Red Card|Yellow\/Red Card|Yellowred Card)[^(]*\(([^)]+)\)/i.exec(text)
+    const m =
+      /^(\d+(?:\+\d+)?)'\s*~\s*(?:\d+(?:st|nd|rd|th)\s+)?(Yellow Card|Red Card|Yellow\/Red Card|Yellowred Card)\s*~\s*([\s\S]*?)\(([^()]+)\)\s*$/i.exec(
+        text.trim(),
+      )
     if (!m) continue
-    const teamText = norm(m[3])
-    const isHome = teamText === home || home.includes(teamText) || teamText.includes(home)
+    const rawMiddle = m[3].replace(/~/g, ' ').replace(/\s+/g, ' ').trim()
+    const player = rawMiddle.length >= 2 ? rawMiddle : undefined
+    const rawEventTeam = m[4].trim()
+    const isHome = resolveBetsapiEventIsHome(rawEventTeam, homeName, awayName, match)
     const kind = m[2].toLowerCase()
     const type = kind === 'yellow card' ? 'yellow_card' : 'red_card'
     const team = isHome ? match.homeTeam : match.awayTeam
     const minute = `${m[1]}'`
+    const label =
+      type === 'yellow_card' ? 'Tarjeta amarilla' : kind === 'red card' ? 'Tarjeta roja' : 'Doble amarilla'
     out.push({
       id: `rfef-card-${ev.id ?? i}`,
       minute,
       type,
       teamId: team.id,
       isHome,
-      text: `${minute} ${type === 'yellow_card' ? 'Tarjeta amarilla' : kind === 'red card' ? 'Tarjeta roja' : 'Doble amarilla'} (${team.name})`,
+      player,
+      text: `${minute} ${label} (${team.name})`,
     })
   }
   return out.sort((a, b) => sortValue(a.minute) - sortValue(b.minute))
@@ -173,7 +245,12 @@ export async function fetchRfefExtraDetail(
   const stadium = res.extra?.stadium_data
   const capacity = Number(stadium?.capacity)
   const detail: RfefExtraDetail = {
-    cards: parseBetsapiCards(res.events ?? [], res.home?.name ?? match.homeTeam.name, match),
+    cards: parseBetsapiCards(
+      res.events ?? [],
+      res.home?.name ?? match.homeTeam.name,
+      match,
+      res.away?.name ?? match.awayTeam.name,
+    ),
     stats: parseBetsapiStats(res.stats),
     venue: stadium?.name
       ? { name: stadium.name, city: stadium.city, capacity: capacity > 0 ? capacity : undefined }

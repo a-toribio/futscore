@@ -55,4 +55,50 @@ describe('detalle de partidos RFEF (futbolme)', () => {
     }) as unknown as typeof fetch)
     expect(called).toContain('id=12158004')
   })
+
+  it('asigna el equipo correcto en tarjetas RFEF incluso con alias distintos o nombres parecidos', () => {
+    const aliasMatch = {
+      id: 'rfef-2',
+      leagueId: 'primera_rfef',
+      homeTeam: { id: 'rfef-ud-ourense', name: 'UD Ourense', shortName: 'UD' },
+      awayTeam: { id: 'rfef-ourense-cf', name: 'Ourense CF', shortName: 'OUR' },
+      kickoff: '2026-11-15T17:00:00.000Z',
+      status: 'finished',
+      score: { home: 1, away: 0 },
+    } as Match
+
+    const cards = parseBetsapiCards(
+      [
+        { id: 'c1', text: "22' ~ 1st Yellow Card ~  ~(Ourense CF)" },
+        { id: 'c2', text: "55' ~ 2nd Yellow Card ~  ~(UD Ourense)" },
+      ],
+      'UD Ourense',
+      aliasMatch,
+      'Ourense CF',
+    )
+    expect(cards[0].isHome).toBe(false)
+    expect(cards[1].isHome).toBe(true)
+
+    const leonesaMatch = {
+      id: 'rfef-3',
+      leagueId: 'primera_rfef',
+      homeTeam: { id: 'rfef-real-union-club', name: 'Real Unión Club', shortName: 'UNI' },
+      awayTeam: { id: 'rfef-cyd-leonesa', name: 'CyD Leonesa', shortName: 'LEO' },
+      kickoff: '2026-11-15T17:00:00.000Z',
+      status: 'finished',
+      score: { home: 1, away: 0 },
+    } as Match
+
+    const cards2 = parseBetsapiCards(
+      [
+        { id: 'c3', text: "16' ~ 1st Yellow Card ~  ~(Cultural Leonesa)" },
+        { id: 'c4', text: "38' ~ 2nd Yellow Card ~  ~(Real Unión)" },
+      ],
+      'Real Unión',
+      leonesaMatch,
+      'Cultural Leonesa',
+    )
+    expect(cards2[0].isHome).toBe(false)
+    expect(cards2[1].isHome).toBe(true)
+  })
 })

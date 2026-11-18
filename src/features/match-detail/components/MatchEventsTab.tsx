@@ -46,8 +46,8 @@ export function MatchEventsTab({
 
   return (
     <div className="relative py-3">
-      {/* Línea vertical de la cronología */}
-      <div className="absolute left-6 top-6 bottom-6 w-0.5 bg-border sm:left-1/2 sm:-ml-px" />
+      {/* Línea vertical central de la cronología (Local a la izquierda, Visitante a la derecha) */}
+      <div className="absolute left-1/2 top-4 bottom-4 -ml-px w-0.5 bg-border" />
 
       <ul className="space-y-3">
         {events.map((event) => {
@@ -58,33 +58,30 @@ export function MatchEventsTab({
           return (
             <li
               key={event.id}
-              className={clsx(
-                'relative flex items-start gap-3 sm:items-center',
-                isHome ? 'sm:flex-row-reverse sm:text-right' : 'sm:flex-row sm:text-left',
-              )}
+              className={clsx('relative flex items-start', isHome ? 'justify-start' : 'justify-end')}
             >
-              {/* Contenedor del evento */}
+              {/* Contenedor de la tarjeta en su columna (Local = izquierda, Visitante = derecha) */}
               <div
                 className={clsx(
-                  'flex-1 pl-12 sm:pl-0 sm:w-1/2',
-                  isHome ? 'sm:pr-6' : 'sm:pl-6',
+                  'w-[calc(50%-1rem)] sm:w-[calc(50%-1.25rem)]',
+                  isHome ? 'text-left' : 'text-right',
                 )}
               >
                 <div
                   className={clsx(
-                    'rounded-xl border border-border bg-card p-3 shadow-xs transition-colors hover:border-border/80',
+                    'rounded-xl border border-border bg-card p-2.5 sm:p-3 shadow-xs transition-colors hover:border-border/80',
                     event.type === 'goal' && 'border-accent/40 bg-accent/5',
                   )}
                 >
                   {/* Minuto y Equipo */}
                   <div
                     className={clsx(
-                      'flex items-center gap-1.5 text-xs font-semibold',
-                      isHome ? 'sm:justify-end' : 'sm:justify-start',
+                      'flex items-center gap-1.5 text-xs font-semibold min-w-0',
+                      isHome ? 'justify-start' : 'justify-end',
                     )}
                   >
-                    <span className="text-accent font-bold tabular-nums">{event.minute}</span>
-                    <span className="text-fg-subtle">·</span>
+                    <span className="text-accent font-bold tabular-nums shrink-0">{event.minute}</span>
+                    <span className="text-fg-subtle shrink-0">·</span>
                     <span className="text-fg-muted font-medium text-[11px] truncate">{teamLabel}</span>
                   </div>
 
@@ -92,13 +89,21 @@ export function MatchEventsTab({
                   <div className="mt-1.5 text-xs">
                     {event.type === 'goal' ? (
                       <div>
-                        <div className="flex items-center gap-1.5 font-bold text-fg">
+                        <div
+                          className={clsx(
+                            'flex flex-wrap items-center gap-1.5 font-bold text-fg',
+                            isHome ? 'justify-start' : 'justify-end',
+                          )}
+                        >
                           <span className="text-base text-accent leading-none">⚽</span>
                           {event.player ? (
                             <button
                               type="button"
                               onClick={() => onSelectPlayerName?.(event.player!, isHome)}
-                              className="text-sm hover:text-accent hover:underline cursor-pointer font-bold text-fg text-left"
+                              className={clsx(
+                                'text-sm hover:text-accent hover:underline cursor-pointer font-bold text-fg',
+                                isHome ? 'text-left' : 'text-right',
+                              )}
                             >
                               {event.player}
                             </button>
@@ -120,8 +125,8 @@ export function MatchEventsTab({
                         {event.assistPlayer && (
                           <div
                             className={clsx(
-                              'mt-1 flex items-center gap-1 text-[11px] text-fg-subtle',
-                              isHome ? 'sm:justify-end' : 'sm:justify-start',
+                              'mt-1 flex flex-wrap items-center gap-1 text-[11px] text-fg-subtle',
+                              isHome ? 'justify-start' : 'justify-end',
                             )}
                           >
                             <span>Asistencia:</span>
@@ -140,15 +145,18 @@ export function MatchEventsTab({
                         {event.subIn && (
                           <div
                             className={clsx(
-                              'flex items-center gap-1.5 text-xs font-semibold text-emerald-400',
-                              isHome ? 'sm:justify-end' : 'sm:justify-start',
+                              'flex flex-wrap items-center gap-1 text-xs font-semibold text-emerald-400',
+                              isHome ? 'justify-start' : 'justify-end',
                             )}
                           >
                             <span>🟢 Entra:</span>
                             <button
                               type="button"
                               onClick={() => onSelectPlayerName?.(event.subIn!, isHome)}
-                              className="text-fg hover:text-accent hover:underline cursor-pointer"
+                              className={clsx(
+                                'text-fg hover:text-accent hover:underline cursor-pointer',
+                                isHome ? 'text-left' : 'text-right',
+                              )}
                             >
                               {event.subIn}
                             </button>
@@ -157,15 +165,18 @@ export function MatchEventsTab({
                         {event.subOut && (
                           <div
                             className={clsx(
-                              'flex items-center gap-1.5 text-[11px] font-medium text-rose-400/90',
-                              isHome ? 'sm:justify-end' : 'sm:justify-start',
+                              'flex flex-wrap items-center gap-1 text-[11px] font-medium text-rose-400/90',
+                              isHome ? 'justify-start' : 'justify-end',
                             )}
                           >
                             <span>🔴 Sale:</span>
                             <button
                               type="button"
                               onClick={() => onSelectPlayerName?.(event.subOut!, isHome)}
-                              className="text-fg-muted hover:text-accent hover:underline cursor-pointer"
+                              className={clsx(
+                                'text-fg-muted hover:text-accent hover:underline cursor-pointer',
+                                isHome ? 'text-left' : 'text-right',
+                              )}
                             >
                               {event.subOut}
                             </button>
@@ -182,14 +193,22 @@ export function MatchEventsTab({
                         )}
                       </div>
                     ) : (
-                      <div className="flex items-center gap-1.5 font-bold text-fg">
+                      <div
+                        className={clsx(
+                          'flex flex-wrap items-center gap-1.5 font-bold text-fg',
+                          isHome ? 'justify-start' : 'justify-end',
+                        )}
+                      >
                         {event.type === 'yellow_card' && <span className="text-xs">🟨</span>}
                         {event.type === 'red_card' && <span className="text-xs">🟥</span>}
                         {event.player ? (
                           <button
                             type="button"
                             onClick={() => onSelectPlayerName?.(event.player!, isHome)}
-                            className="hover:text-accent hover:underline cursor-pointer text-left"
+                            className={clsx(
+                              'hover:text-accent hover:underline cursor-pointer',
+                              isHome ? 'text-left' : 'text-right',
+                            )}
                           >
                             {event.player}
                           </button>
@@ -206,7 +225,7 @@ export function MatchEventsTab({
               <div
                 aria-hidden="true"
                 className={clsx(
-                  'absolute left-4 top-3 -ml-3 flex size-6 items-center justify-center rounded-full border text-[11px] font-bold shadow-xs sm:left-1/2',
+                  'absolute left-1/2 top-3 -translate-x-1/2 z-10 flex size-6 items-center justify-center rounded-full border text-[11px] font-bold shadow-xs',
                   color,
                 )}
               >

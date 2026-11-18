@@ -63,7 +63,7 @@ interface EspnKeyEvent {
   text?: string
   clock?: { displayValue?: string }
   type?: { id?: string; text?: string }
-  team?: { id?: string }
+  team?: { id?: string; displayName?: string }
 }
 
 interface EspnRosterItem {
@@ -198,7 +198,7 @@ function mapEventType(typeText = ''): MatchEventType {
 
 /**
  * Parsea el texto del evento de ESPN para extraer de forma limpia el jugador,
- * asistente, sustitución, etc., evitando frases largas en inglés.
+ * asistente, sustitución, equipo, etc., evitando frases largas en inglés.
  */
 export function parseEspnEventDetails(text: string, rawType = '') {
   let type = mapEventType(rawType)
@@ -206,23 +206,26 @@ export function parseEspnEventDetails(text: string, rawType = '') {
   let assistPlayer: string | undefined
   let subIn: string | undefined
   let subOut: string | undefined
+  let teamName: string | undefined
   let isPenalty = false
   let isOwnGoal = false
 
   const clean = text.trim()
 
   // 1. Gol en propia puerta: "Own Goal by Sergio Ramos (Sevilla)."
-  const ownGoalMatch = /Own Goal by\s+([^(.]+)/i.exec(clean)
+  const ownGoalMatch = /Own Goal by\s+([^(.]+?)(?:\s*\(([^)]+)\))?(?:\.|$)/i.exec(clean)
   if (ownGoalMatch) {
     type = 'goal'
     isOwnGoal = true
     player = ownGoalMatch[1].trim()
+    teamName = ownGoalMatch[2]?.trim()
   } else {
     // 2. Gol normal o penalti: "Goal! Elche 0, Real Betis 2. Marc Bartra (Real Betis)..."
-    const goalMatch = /Goal!\s+[^.]+\.\s+([^(]+)\s*\([^)]*\)/i.exec(clean)
+    const goalMatch = /Goal!\s+[^.]+\.\s+([^(]+)\s*\(([^)]+)\)/i.exec(clean)
     if (goalMatch) {
       type = 'goal'
       player = goalMatch[1].trim()
+      teamName = goalMatch[2].trim()
       if (/converts the penalty|penalty shot|penalty/i.test(clean)) {
         isPenalty = true
       }
@@ -234,62 +237,92 @@ export function parseEspnEventDetails(text: string, rawType = '') {
   }
 
   // 3. Tarjetas: "Federico Redondo (Elche) is shown the yellow card..."
-  const cardMatch = /^([^(]+)\s*\([^)]*\)\s+is shown the (yellow|red) card/i.exec(clean)
+  const cardMatch = /^([^(]+)\s*\(([^)]+)\)\s+is shown the (yellow|red) card/i.exec(clean)
   if (cardMatch) {
     player = cardMatch[1].trim()
-    type = cardMatch[2].toLowerCase() === 'red' ? 'red_card' : 'yellow_card'
+    teamName = cardMatch[2].trim()
+    type = cardMatch[3].toLowerCase() === 'red' ? 'red_card' : 'yellow_card'
   }
 
   // 4. Sustituciones: "Substitution, Real Betis. Dani Ceballos replaces Pablo Fornals."
-  const subMatch = /Substitution,[^.]*\.\s+([^.]+?)\s+replaces\s+([^.]+?)(?:\s+because|\.|$)/i.exec(clean)
+  const subMatch = /Substitution,\s*([^.]+)\.\s+([^.]+?)\s+replaces\s+([^.]+?)(?:\s+because|\.|$)/i.exec(clean)
   if (subMatch) {
     type = 'substitution'
-    subIn = subMatch[1].trim()
-    subOut = subMatch[2].trim()
+    teamName = subMatch[1].trim()
+    subIn = subMatch[2].trim()
+    subOut = subMatch[3].trim()
     player = subIn
   }
 
   // Fallback si no encajó en las anteriores
   if (!player && !subIn) {
-    const parenMatch = /^([^(]+)\s*\(/i.exec(clean)
-    if (parenMatch) {
-      player = parenMatch[1].trim()
+    const parenWithTeam = /^([^(]+)\s*\(([^)]+)\)/i.exec(clean)
+    if (parenWithTeam) {
+      player = parenWithTeam[1].trim()
+      teamName = teamName ?? parenWithTeam[2].trim()
     } else {
-      player = clean
+      const parenMatch = /^([^(]+)\s*\(/i.exec(clean)
+      if (parenMatch) {
+        player = parenMatch[1].trim()
+      } else {
+        player = clean
+      }
     }
   }
 
-  return { type, player, assistPlayer, subIn, subOut, isPenalty, isOwnGoal }
+  return { type, player, assistPlayer, subIn, subOut, teamName, isPenalty, isOwnGoal }
+}
+
+const NON_TEAM_EVENT_TYPES =
+  /^(kickoff|halftime|start\s*2nd\s*half|end\s*regular\s*time|end\s*extra\s*time|end\s*match|full\s*time|match\s*ends?)$/i
+const NON_TEAM_EVENT_TEXT =
+  /^(first\s+half\s+ends|second\s+half\s+ends|half\s*time|full\s*time|match\s+ends|extra\s+time\s+ends|kickoff|start\s+of)/i
+
+function normalizeEventEntity(s: string): string {
+  return s
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '')
+}
+
+function teamMatchScore(candidate: string | undefined, team: Match['homeTeam']): number {
+  if (!candidate) return 0
+  const cand = normalizeEventEntity(candidate)
+  if (!cand) return 0
+  const name = normalizeEventEntity(team.name)
+  const short = normalizeEventEntity(team.shortName)
+  if (cand === name || (short && cand === short)) return 3
+  if (cand.length >= 4 && (name.includes(cand) || cand.includes(name))) return 1
+  return 0
+}
+
+function resolveIsHomeByLineup(
+  names: (string | undefined)[],
+  homeLineup: TeamLineup,
+  awayLineup: TeamLineup,
+): boolean | undefined {
+  const normalizedTargets = names.map((n) => (n ? normalizeEventEntity(n) : '')).filter((n) => n.length >= 3)
+  if (normalizedTargets.length === 0) return undefined
+
+  const inLineup = (lineup: TeamLineup) =>
+    [...lineup.starters, ...lineup.substitutes].some((p) => {
+      const pn = normalizeEventEntity(p.name)
+      return normalizedTargets.some((t) => pn === t || pn.includes(t) || t.includes(pn))
+    })
+
+  const inHome = inLineup(homeLineup)
+  const inAway = inLineup(awayLineup)
+  if (inHome && !inAway) return true
+  if (inAway && !inHome) return false
+  return undefined
 }
 
 export function mapEspnSummary(data: EspnSummaryResponse, match: Match): MatchDetail {
   const homeEspnId = match.homeTeam.id.replace(/^espn-/, '')
+  const awayEspnId = match.awayTeam.id.replace(/^espn-/, '')
 
-  // 1. Mapear Eventos limpios
-  const events: MatchEvent[] = (data.keyEvents ?? [])
-    .filter((e) => e.text && e.text.trim().length > 0)
-    .map((e, index) => {
-      const parsed = parseEspnEventDetails(e.text || '', e.type?.text)
-      const minute = e.clock?.displayValue || ''
-      const isHome = e.team?.id ? e.team.id === homeEspnId : undefined
-
-      return {
-        id: e.id || `event-${index}`,
-        minute,
-        type: parsed.type,
-        teamId: e.team?.id,
-        isHome,
-        text: e.text || '',
-        player: parsed.player,
-        assistPlayer: parsed.assistPlayer,
-        subIn: parsed.subIn,
-        subOut: parsed.subOut,
-        isPenalty: parsed.isPenalty,
-        isOwnGoal: parsed.isOwnGoal,
-      }
-    })
-
-  // 2. Mapear Alineaciones
+  // 1. Mapear Alineaciones primero para poder cruzar jugadores si falta el ID de equipo en un evento
   const mapRoster = (raw?: EspnTeamRoster, fallbackTeam = match.homeTeam): TeamLineup => {
     const starters: Player[] = []
     const substitutes: Player[] = []
@@ -337,6 +370,87 @@ export function mapEspnSummary(data: EspnSummaryResponse, match: Match): MatchDe
     home: mapRoster(homeRoster, match.homeTeam),
     away: mapRoster(awayRoster, match.awayTeam),
   }
+
+  // 2. Mapear Eventos limpios determinando Local/Visitante con 3 niveles de verificación
+  const events: MatchEvent[] = (data.keyEvents ?? [])
+    .filter((e) => {
+      const text = e.text?.trim() ?? ''
+      if (!text) return false
+      const rawType = e.type?.text?.trim() ?? ''
+      if (NON_TEAM_EVENT_TYPES.test(rawType)) return false
+      if (!e.team?.id && NON_TEAM_EVENT_TEXT.test(text)) return false
+      return true
+    })
+    .map((e, index): MatchEvent | null => {
+      const rawText = e.text || ''
+      const parsed = parseEspnEventDetails(rawText, e.type?.text)
+      if (parsed.type === 'other' && !e.team?.id && !parsed.teamName) {
+        return null
+      }
+
+      const minute = e.clock?.displayValue || ''
+      let isHome: boolean | undefined
+
+      // Nivel 1: ID explícito del equipo en keyEvent
+      if (e.team?.id) {
+        const rawTeamId = String(e.team.id)
+        if (rawTeamId === homeEspnId) isHome = true
+        else if (rawTeamId === awayEspnId) isHome = false
+      }
+
+      // Nivel 2: Nombre de equipo en keyEvent.team.displayName o extraído del texto
+      if (isHome === undefined && e.team?.displayName) {
+        const hs = teamMatchScore(e.team.displayName, match.homeTeam)
+        const as = teamMatchScore(e.team.displayName, match.awayTeam)
+        if (hs !== as) isHome = hs > as
+      }
+
+      if (isHome === undefined && parsed.teamName) {
+        const hs = teamMatchScore(parsed.teamName, match.homeTeam)
+        const as = teamMatchScore(parsed.teamName, match.awayTeam)
+        if (hs !== as) {
+          // En "Own Goal by Jugador (EquipoDefensor)", el paréntesis indica el equipo del jugador;
+          // el gol favorece al conjunto contrario.
+          const matchedHome = hs > as
+          isHome = parsed.isOwnGoal ? !matchedHome : matchedHome
+        }
+      }
+
+      // Nivel 3: Cruce del jugador (autor / sustitución) contra las plantillas del partido
+      if (isHome === undefined) {
+        const matchedHome = resolveIsHomeByLineup(
+          [parsed.player, parsed.subIn, parsed.subOut],
+          lineups.home,
+          lineups.away,
+        )
+        if (matchedHome !== undefined) {
+          isHome = parsed.isOwnGoal ? !matchedHome : matchedHome
+        }
+      }
+
+      const resolvedTeamId =
+        isHome === true
+          ? match.homeTeam.id
+          : isHome === false
+            ? match.awayTeam.id
+            : e.team?.id
+
+      return {
+        id: e.id || `event-${index}`,
+        minute,
+        type: parsed.type,
+        teamId: resolvedTeamId,
+        isHome,
+        text: rawText,
+        player: parsed.player,
+        assistPlayer: parsed.assistPlayer,
+        subIn: parsed.subIn,
+        subOut: parsed.subOut,
+        isPenalty: parsed.isPenalty,
+        isOwnGoal: parsed.isOwnGoal,
+      }
+    })
+    .filter((ev): ev is MatchEvent => ev !== null)
 
   // Registrar jugadores en el índice de búsqueda
   if (lineups.home.starters.length > 0 || lineups.home.substitutes.length > 0) {

@@ -184,8 +184,9 @@ function decodeHtmlEntities(str: string): string {
 
 function parseGoalSide(
   htmlBlock: string,
-  isHome: boolean,
-  teamId: string,
+  defaultIsHome: boolean,
+  homeTeamId: string,
+  awayTeamId: string,
   startIdx: number,
 ): MatchEvent[] {
   const events: MatchEvent[] = []
@@ -205,6 +206,17 @@ function parseGoalSide(
 
     if (!rawPlayer && !minute) return
 
+    // En Futbolme el número en negrita (`<b>1</b>-0` vs `1-<b>2</b>`) marca inequívocamente qué equipo anotó el gol
+    const boldHomeScore = /<b>\s*\d+\s*<\/b>\s*-\s*\d+/i.test(part)
+    const boldAwayScore = /\d+\s*-\s*<b>\s*\d+\s*<\/b>/i.test(part)
+    const isHome =
+      boldHomeScore && !boldAwayScore
+        ? true
+        : boldAwayScore && !boldHomeScore
+          ? false
+          : defaultIsHome
+
+    const teamId = isHome ? homeTeamId : awayTeamId
     const isPenalty = /\((?:pen\.?|p\.?)\)/i.test(part)
     const isOwnGoal = /\((?:p\.?\s*p\.?|propia)\)/i.test(part)
 
@@ -464,8 +476,8 @@ export function parseMatchBlocks(
     // Extraer goles reales (observacionesGoles)
     const obsMatch = /<div class="row observacionesGoles">([\s\S]*?)<\/div>\s*<\/div>/i.exec(block)?.[1] ?? ''
     const colBlocks = obsMatch.split('<div class="col-6 nopadding">').slice(1)
-    const homeEvents = colBlocks[0] ? parseGoalSide(colBlocks[0], true, homeTeam.id, 0) : []
-    const awayEvents = colBlocks[1] ? parseGoalSide(colBlocks[1], false, awayTeam.id, 100) : []
+    const homeEvents = colBlocks[0] ? parseGoalSide(colBlocks[0], true, homeTeam.id, awayTeam.id, 0) : []
+    const awayEvents = colBlocks[1] ? parseGoalSide(colBlocks[1], false, homeTeam.id, awayTeam.id, 100) : []
     const events = [...homeEvents, ...awayEvents].sort(
       (a, b) => minuteToSortValue(a.minute) - minuteToSortValue(b.minute),
     )

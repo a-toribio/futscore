@@ -275,6 +275,64 @@ describe('mapEspnSummary', () => {
       awayNumeric: 41.6,
     })
   })
+
+  it('asigna el equipo correcto (local/visitante) por ID, texto o plantilla y filtra cierres de parte', () => {
+    const raw = {
+      keyEvents: [
+        { id: 'ko', clock: { displayValue: "1'" }, type: { text: 'Kickoff' }, text: 'First Half begins.' },
+        {
+          id: 'g1',
+          clock: { displayValue: "12'" },
+          type: { text: 'Goal' },
+          team: { id: '1' },
+          text: 'Goal! Real Madrid 1, Barcelona 0. Vinícius Júnior (Real Madrid) right footed shot.',
+        },
+        {
+          id: 'c1',
+          clock: { displayValue: "28'" },
+          type: { text: 'Yellow Card' },
+          // Sin team.id explícito: debe resolverse por "(Barcelona)" como visitante
+          text: 'Gavi (Barcelona) is shown the yellow card for a bad foul.',
+        },
+        {
+          id: 's1',
+          clock: { displayValue: "60'" },
+          type: { text: 'Substitution' },
+          // Sin team.id ni texto con club claro: debe resolverse por el jugador en la plantilla visitante
+          text: 'Substitution, Unknown. Pedri replaces Fermín López.',
+        },
+        {
+          id: 'og1',
+          clock: { displayValue: "70'" },
+          type: { text: 'Goal' },
+          // Propia puerta de un jugador del Barcelona -> favorece al Real Madrid (local = true)
+          text: 'Own Goal by Ronald Araujo (Barcelona).',
+        },
+        { id: 'ht', clock: { displayValue: "45'+2'" }, type: { text: 'Halftime' }, text: 'First Half ends, Real Madrid 1, Barcelona 0.' },
+      ],
+      rosters: [
+        {
+          team: { id: '1', displayName: 'Real Madrid' },
+          roster: [{ starter: true, jersey: '7', athlete: { displayName: 'Vinícius Júnior' } }],
+        },
+        {
+          team: { id: '2', displayName: 'Barcelona' },
+          roster: [
+            { starter: true, jersey: '6', athlete: { displayName: 'Gavi' } },
+            { starter: true, jersey: '16', athlete: { displayName: 'Fermín López' } },
+            { starter: false, jersey: '8', athlete: { displayName: 'Pedri' } },
+          ],
+        },
+      ],
+    }
+
+    const detail = mapEspnSummary(raw, matchSample)
+    expect(detail.events.map((e) => e.id)).toEqual(['g1', 'c1', 's1', 'og1'])
+    expect(detail.events[0]).toMatchObject({ isHome: true, player: 'Vinícius Júnior' })
+    expect(detail.events[1]).toMatchObject({ isHome: false, type: 'yellow_card', player: 'Gavi' })
+    expect(detail.events[2]).toMatchObject({ isHome: false, type: 'substitution', subIn: 'Pedri', subOut: 'Fermín López' })
+    expect(detail.events[3]).toMatchObject({ isHome: true, isOwnGoal: true, player: 'Ronald Araujo' })
+  })
 })
 
 describe('mapEspnStandings', () => {
