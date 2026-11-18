@@ -94,6 +94,8 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
             onClose={closeTeam}
             onSelectMatch={setSelectedMatch}
             onSelectPlayer={(p) => api.openPlayer(p, teamRef.team, teamRef.leagueId)}
+            onOpenTeam={(team, leagueId) => api.openTeam(team, leagueId)}
+            onOpenLeague={(leagueId, highlightTeamIds) => api.openLeague(leagueId, highlightTeamIds)}
           />
         )}
 

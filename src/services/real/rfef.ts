@@ -922,6 +922,7 @@ export async function fetchRfefTeamProfile(
     team,
     leagueId: club.leagueId,
     leagueName: group ? `${leagueName} · ${group.name}` : leagueName,
+    groupCode: club.groupCode,
     fullName: data.fullName ?? verified?.fullName ?? club.name,
     founded: data.founded ?? verified?.founded,
     location: city,

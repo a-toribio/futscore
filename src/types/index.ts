@@ -275,6 +275,7 @@ export interface TeamProfile {
   isNationalTeam?: boolean
   leagueId?: string
   leagueName?: string
+  groupCode?: string
   fullName?: string
   founded?: string
   location?: string
