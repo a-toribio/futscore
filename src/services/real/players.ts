@@ -36,6 +36,47 @@ interface EspnSearchPlayerResponse {
   }[]
 }
 
+/**
+ * Normaliza un nombre para comparación: minúsculas, sin tildes ni caracteres especiales.
+ */
+function normalizeName(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // eliminar diacríticos
+    .replace(/[^a-z0-9\s]/g, '')     // eliminar caracteres especiales
+    .trim()
+}
+
+/**
+ * Comprueba si dos nombres de jugador son suficientemente similares.
+ * - Si el nombre más corto tiene 1 token, basta con que aparezca en el más largo.
+ * - Si ambos tienen ≥ 2 tokens, al menos el 50% de los tokens del más corto
+ *   deben aparecer en el conjunto de tokens del más largo.
+ * Robusto con nombres compuestos (De Bruyne, ter Stegen, Lo Celso…).
+ */
+function nameSimilarEnough(a: string, b: string): boolean {
+  const na = normalizeName(a)
+  const nb = normalizeName(b)
+
+  const tokensA = na.split(/\s+/).filter(Boolean)
+  const tokensB = nb.split(/\s+/).filter(Boolean)
+
+  const [shorter, longer] =
+    tokensA.length <= tokensB.length ? [tokensA, tokensB] : [tokensB, tokensA]
+
+  const longerSet = new Set(longer)
+
+  if (shorter.length === 1) {
+    // Para apodos o apellidos simples: "Aspas" debe aparecer en "Iago Aspas"
+    return longerSet.has(shorter[0])
+  }
+
+  // Al menos el 50% de los tokens del nombre más corto deben coincidir
+  const matchCount = shorter.filter((t) => longerSet.has(t)).length
+  return matchCount / shorter.length >= 0.5
+}
+
 async function resolveEspnAthleteId(name: string): Promise<string | null> {
   try {
     const res = await fetch(
@@ -45,6 +86,12 @@ async function resolveEspnAthleteId(name: string): Promise<string | null> {
       const data: EspnSearchPlayerResponse = await res.json()
       const first = data.results?.[0]?.contents?.[0]
       if (first?.uid) {
+        // Validar que el nombre del resultado corresponde al jugador buscado
+        // para evitar devolver el ID de un jugador famoso con nombre parecido
+        const resultName = first.displayName ?? ''
+        if (!nameSimilarEnough(name, resultName)) {
+          return null
+        }
         const idMatch = /~a:(\d+)/.exec(first.uid)
         return idMatch ? idMatch[1] : null
       }
@@ -248,9 +295,16 @@ export async function fetchPlayerProfile(ref: PlayerRef): Promise<PlayerProfile>
     wikiPromise,
   ])
 
-  const espnData = espnRes.status === 'fulfilled' ? espnRes.value : null
+  let espnData = espnRes.status === 'fulfilled' ? espnRes.value : null
   const espnBioData = espnBioRes.status === 'fulfilled' ? espnBioRes.value : null
   const wikiData = wikiRes.status === 'fulfilled' ? wikiRes.value : null
+
+  // Si el ID era numérico (ya resuelto en la alineación), verificar igualmente que el
+  // displayName de ESPN coincide con el jugador buscado. Si difiere mucho, descartar
+  // los datos ESPN para no mostrar una ficha errónea.
+  if (espnData?.athlete?.displayName && !nameSimilarEnough(playerName, espnData.athlete.displayName)) {
+    espnData = null
+  }
 
   const athlete = espnData?.athlete
 
