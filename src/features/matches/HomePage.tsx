@@ -1,16 +1,20 @@
 import clsx from 'clsx'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useFavoritesStore } from '@/features/favorites/favoritesStore'
 import { useAppNavigation } from '@/features/navigation/navigationContext'
 import { useHorizontalSwipe } from '@/hooks/useHorizontalSwipe'
-import { toDateKey } from '@/lib/date'
+import { addDaysToDateKey, toDateKey } from '@/lib/date'
 import { buildMatchViewTabs, getAdjacentMatchView, type MatchView } from '@/lib/dayViews'
 import { splitFavoriteMatches } from '@/lib/favorites'
+import { matchesByDateQueryOptions } from './hooks/useMatchesByDate'
 import type { LeagueMatches } from '@/types'
 import { DayTabs } from './components/DayTabs'
 import { LeagueSection } from './components/LeagueSection'
 import { MatchCard } from './components/MatchCard'
 import { useMatchesByDate } from './hooks/useMatchesByDate'
+
+const ADJACENT_DAY_PREFETCH_DELAY_MS = 1_200
 
 function onlyLive(groups: LeagueMatches[]): LeagueMatches[] {
   return groups
@@ -31,6 +35,7 @@ function getRecentMatchdayDate(todayIso: string): string {
 export function HomePage() {
   const [today] = useState(() => toDateKey(new Date()))
   const [view, setView] = useState<MatchView>(today)
+  const queryClient = useQueryClient()
   const { openMatch, openLeague } = useAppNavigation()
 
   const tabs = useMemo(() => buildMatchViewTabs(today), [today])
@@ -50,9 +55,23 @@ export function HomePage() {
 
   // Los directos son siempre de hoy. React Query comparte la caché si ambas claves coinciden.
   const todayQuery = useMatchesByDate(today, today)
-  const dayQuery = useMatchesByDate(view === 'live' ? today : view, today)
+  const activeDate = view === 'live' ? today : view
+  const dayQuery = useMatchesByDate(activeDate, today)
   const { data, isPending, isError, isPlaceholderData, refetch } =
     view === 'live' ? todayQuery : dayQuery
+
+  useEffect(() => {
+    if (!dayQuery.isSuccess || dayQuery.isPlaceholderData || !navigator.onLine) return
+
+    const timeoutId = window.setTimeout(() => {
+      for (const offset of [-1, 1]) {
+        const date = addDaysToDateKey(activeDate, offset)
+        void queryClient.prefetchQuery(matchesByDateQueryOptions(date, today))
+      }
+    }, ADJACENT_DAY_PREFETCH_DELAY_MS)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [activeDate, dayQuery.isPlaceholderData, dayQuery.isSuccess, queryClient, today])
 
   const liveGroups = useMemo(() => onlyLive(todayQuery.data ?? []), [todayQuery.data])
   const liveCount = useMemo(() => liveGroups.reduce((n, g) => n + g.matches.length, 0), [liveGroups])
@@ -101,7 +120,7 @@ export function HomePage() {
             </div>
           )}
 
-          {isError && (
+          {isError && !data && (
             <div className="rounded-xl border border-danger/40 bg-card p-4 text-sm">
               <p className="text-danger font-semibold">No se pudieron cargar los partidos.</p>
               <p className="mt-1 text-xs text-fg-subtle">
@@ -115,6 +134,12 @@ export function HomePage() {
                 Reintentar
               </button>
             </div>
+          )}
+
+          {isError && data !== undefined && !isPlaceholderData && (
+            <p role="status" className="rounded-lg border border-danger/30 bg-card px-3 py-2 text-xs text-fg-muted">
+              No se pudieron actualizar los partidos. Mostrando los últimos datos disponibles.
+            </p>
           )}
 
           {!isPending && !isError && groups.length === 0 && favoriteTeamMatches.length === 0 && (
@@ -148,6 +173,7 @@ export function HomePage() {
                   key={match.id}
                   match={match}
                   onClick={() => openMatch(match)}
+                  linkTeams={false}
                 />
               ))}
             </ul>
@@ -161,6 +187,7 @@ export function HomePage() {
                   {...group}
                   onSelectMatch={openMatch}
                   onOpenStandings={(leagueId) => openLeague(leagueId)}
+                  linkTeams={false}
                 />
               ))}
             </div>

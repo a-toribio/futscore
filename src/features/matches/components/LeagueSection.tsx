@@ -7,6 +7,7 @@ import { MatchCard } from './MatchCard'
 interface LeagueSectionProps extends LeagueMatches {
   onSelectMatch?: (match: Match) => void
   onOpenStandings?: (leagueId: string) => void
+  linkTeams?: boolean
 }
 
 export function LeagueSection({
@@ -14,6 +15,7 @@ export function LeagueSection({
   matches,
   onSelectMatch,
   onOpenStandings,
+  linkTeams = true,
 }: LeagueSectionProps) {
   const [open, setOpen] = useState(true)
   const isFav = useFavoritesStore((s) => s.leagueIds.includes(league.id))
@@ -71,6 +73,7 @@ export function LeagueSection({
               key={match.id}
               match={match}
               onClick={() => onSelectMatch?.(match)}
+              linkTeams={linkTeams}
             />
           ))}
         </ul>

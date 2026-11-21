@@ -6,6 +6,12 @@ export function toDateKey(date: Date): string {
   return `${y}-${m}-${d}`
 }
 
+/** Desplaza una fecha local `YYYY-MM-DD` el número indicado de días. */
+export function addDaysToDateKey(dateKey: string, days: number): string {
+  const [year, month, day] = dateKey.split('-').map(Number)
+  return toDateKey(new Date(year, month - 1, day + days))
+}
+
 /** `YYYY-MM-DD` → `YYYYMMDD`. */
 export function toCompactDate(dateKey: string): string {
   return dateKey.replaceAll('-', '')

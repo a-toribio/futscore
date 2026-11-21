@@ -55,9 +55,10 @@ function TeamLink({
 interface MatchCardProps {
   match: Match
   onClick?: () => void
+  linkTeams?: boolean
 }
 
-export function MatchCard({ match, onClick }: MatchCardProps) {
+export function MatchCard({ match, onClick, linkTeams = true }: MatchCardProps) {
   const { status, score, homeTeam, awayTeam } = match
   const isLive = status === 'live'
   const flashing = useChangeFlash(score ? `${score.home}-${score.away}` : '')
@@ -80,15 +81,22 @@ export function MatchCard({ match, onClick }: MatchCardProps) {
           {formatMatchStatus(match)}
         </div>
 
-        <div className="flex min-w-0 items-center justify-end">
-          <TeamLink
-            team={homeTeam}
-            leagueId={match.leagueId}
-            className="flex min-w-0 items-center justify-end gap-2 text-right font-medium cursor-pointer"
-          >
-            <TeamName team={homeTeam} />
-            <TeamCrest team={homeTeam} />
-          </TeamLink>
+        <div className="flex min-w-0 items-center justify-end gap-2">
+          {linkTeams ? (
+            <TeamLink
+              team={homeTeam}
+              leagueId={match.leagueId}
+              className="flex min-w-0 items-center justify-end gap-2 text-right font-medium cursor-pointer"
+            >
+              <TeamName team={homeTeam} />
+              <TeamCrest team={homeTeam} />
+            </TeamLink>
+          ) : (
+            <>
+              <TeamName team={homeTeam} />
+              <TeamCrest team={homeTeam} />
+            </>
+          )}
         </div>
 
         <div
@@ -102,15 +110,22 @@ export function MatchCard({ match, onClick }: MatchCardProps) {
           {score ? `${score.home} - ${score.away}` : 'vs'}
         </div>
 
-        <div className="flex min-w-0 items-center">
-          <TeamLink
-            team={awayTeam}
-            leagueId={match.leagueId}
-            className="flex min-w-0 items-center gap-2 font-medium cursor-pointer"
-          >
-            <TeamCrest team={awayTeam} />
-            <TeamName team={awayTeam} />
-          </TeamLink>
+        <div className="flex min-w-0 items-center gap-2">
+          {linkTeams ? (
+            <TeamLink
+              team={awayTeam}
+              leagueId={match.leagueId}
+              className="flex min-w-0 items-center gap-2 font-medium cursor-pointer"
+            >
+              <TeamCrest team={awayTeam} />
+              <TeamName team={awayTeam} />
+            </TeamLink>
+          ) : (
+            <>
+              <TeamCrest team={awayTeam} />
+              <TeamName team={awayTeam} />
+            </>
+          )}
         </div>
 
         <div className="flex justify-end text-fg-subtle text-xs" aria-hidden="true">
