@@ -44,37 +44,65 @@ function normalizeName(name: string): string {
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '') // eliminar diacríticos
-    .replace(/[^a-z0-9\s]/g, '')     // eliminar caracteres especiales
+    .replace(/[^a-z0-9\s]/g, ' ')     // reemplazar caracteres especiales por espacios
+    .replace(/\s+/g, ' ')
     .trim()
+}
+
+const COMMON_ABBREVIATIONS: Record<string, string> = {
+  jr: 'junior',
+  sr: 'senior',
+}
+
+function tokenMatches(t1: string, t2: string): boolean {
+  if (t1 === t2) return true
+  if (COMMON_ABBREVIATIONS[t1] === t2 || COMMON_ABBREVIATIONS[t2] === t1) return true
+  // Inicial de 1 letra: "a" matches "alberto"
+  if ((t1.length === 1 && t2.startsWith(t1)) || (t2.length === 1 && t1.startsWith(t2))) return true
+  return false
 }
 
 /**
  * Comprueba si dos nombres de jugador son suficientemente similares.
- * - Si el nombre más corto tiene 1 token, basta con que aparezca en el más largo.
- * - Si ambos tienen ≥ 2 tokens, al menos el 50% de los tokens del más corto
- *   deben aparecer en el conjunto de tokens del más largo.
- * Robusto con nombres compuestos (De Bruyne, ter Stegen, Lo Celso…).
+ * Evita que un jugador menos conocido (ej: "Alberto Gómez") coincida con otro
+ * completamente distinto de ESPN (ej: "Mario Gómez") solo por compartir apellido.
  */
-function nameSimilarEnough(a: string, b: string): boolean {
+export function nameSimilarEnough(a: string, b: string): boolean {
   const na = normalizeName(a)
   const nb = normalizeName(b)
+  if (!na || !nb) return false
+  if (na === nb) return true
 
-  const tokensA = na.split(/\s+/).filter(Boolean)
-  const tokensB = nb.split(/\s+/).filter(Boolean)
+  const tokensA = na.split(' ').filter(Boolean)
+  const tokensB = nb.split(' ').filter(Boolean)
 
   const [shorter, longer] =
     tokensA.length <= tokensB.length ? [tokensA, tokensB] : [tokensB, tokensA]
 
-  const longerSet = new Set(longer)
-
+  // Si el nombre más corto tiene 1 token (ej: apodo "Aspas", "Pedri", "Gavi")
   if (shorter.length === 1) {
-    // Para apodos o apellidos simples: "Aspas" debe aparecer en "Iago Aspas"
-    return longerSet.has(shorter[0])
+    const single = shorter[0]
+    return longer.some((t) => tokenMatches(single, t))
   }
 
-  // Al menos el 50% de los tokens del nombre más corto deben coincidir
-  const matchCount = shorter.filter((t) => longerSet.has(t)).length
-  return matchCount / shorter.length >= 0.5
+  let matches = 0
+  const usedLongerIndices = new Set<number>()
+
+  for (const sToken of shorter) {
+    const idx = longer.findIndex((lToken, lIdx) => !usedLongerIndices.has(lIdx) && tokenMatches(sToken, lToken))
+    if (idx !== -1) {
+      matches++
+      usedLongerIndices.add(idx)
+    }
+  }
+
+  // Si el más corto tiene 2 tokens (ej. Nombre + Apellido): deben coincidir ambos tokens
+  if (shorter.length === 2) {
+    return matches === 2
+  }
+
+  // Para nombres largos (3+ tokens), debe coincidir al menos el 75% de los tokens
+  return matches / shorter.length >= 0.75
 }
 
 async function resolveEspnAthleteId(name: string): Promise<string | null> {

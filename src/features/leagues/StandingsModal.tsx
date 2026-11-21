@@ -377,7 +377,6 @@ export function StandingsModal({
                                   <button
                                     type="button"
                                     onClick={() => {
-                                      onClose()
                                       onOpenTeam?.(row.team, openLeagueId)
                                     }}
                                     title={`Ver ficha de ${row.team.name}`}
@@ -663,7 +662,6 @@ export function StandingsModal({
                                     key={m.id}
                                     match={m}
                                     onClick={() => {
-                                      onClose()
                                       onSelectMatch?.(m)
                                     }}
                                   />
@@ -704,7 +702,6 @@ export function StandingsModal({
                                     key={m.id}
                                     match={m}
                                     onClick={() => {
-                                      onClose()
                                       onSelectMatch?.(m)
                                     }}
                                   />

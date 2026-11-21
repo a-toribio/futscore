@@ -116,7 +116,6 @@ export function PlayerDetailModal({ playerRef, onClose, onOpenTeam }: PlayerDeta
                 type="button"
                 onClick={() => {
                   if (displayProfile.currentTeam && onOpenTeam) {
-                    onClose()
                     onOpenTeam(displayProfile.currentTeam, playerRef.leagueId)
                   }
                 }}
@@ -198,7 +197,6 @@ export function PlayerDetailModal({ playerRef, onClose, onOpenTeam }: PlayerDeta
                   <button
                     type="button"
                     onClick={() => {
-                      onClose()
                       onOpenTeam(natTeamRef.team, natTeamRef.leagueId)
                     }}
                     title={`Ver selección de ${natTeamRef.team.name}`}
@@ -422,7 +420,6 @@ export function PlayerDetailModal({ playerRef, onClose, onOpenTeam }: PlayerDeta
                           <div
                             onClick={() => {
                               if (canOpenNat && itemNatRef && onOpenTeam) {
-                                onClose()
                                 onOpenTeam(itemNatRef.team, itemNatRef.leagueId)
                               }
                             }}
@@ -498,7 +495,6 @@ export function PlayerDetailModal({ playerRef, onClose, onOpenTeam }: PlayerDeta
                     <button
                       type="button"
                       onClick={() => {
-                        onClose()
                         onOpenTeam(natTeamRef.team, natTeamRef.leagueId)
                       }}
                       className="flex w-full items-center justify-between gap-3 rounded-lg border border-border/60 bg-card px-3 py-2.5 text-left transition-colors hover:border-accent/50 hover:bg-card-hover cursor-pointer"

@@ -80,7 +80,6 @@ export function MatchDetailModal({
             type="button"
             onClick={() => {
               if (!onOpenStandings) return
-              onClose()
               onOpenStandings(match.leagueId, [
                 match.homeTeam.id,
                 match.awayTeam.id,
@@ -114,7 +113,6 @@ export function MatchDetailModal({
             <button
               type="button"
               onClick={() => {
-                onClose()
                 onOpenTeam?.(match.homeTeam, match.leagueId)
               }}
               title={`Ver ficha de ${match.homeTeam.name}`}
@@ -151,7 +149,6 @@ export function MatchDetailModal({
             <button
               type="button"
               onClick={() => {
-                onClose()
                 onOpenTeam?.(match.awayTeam, match.leagueId)
               }}
               title={`Ver ficha de ${match.awayTeam.name}`}
