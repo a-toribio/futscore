@@ -1,13 +1,16 @@
 import clsx from 'clsx'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { PlayerAvatar } from '@/components/ui/PlayerAvatar'
 import { TeamCrest } from '@/components/ui/TeamCrest'
+import { useTabSwipe } from '@/hooks/useTabSwipe'
 import { getNationalTeamByCountry } from '@/lib/nationalTeams'
 import { translatePosition } from '@/lib/positions'
 import type { PlayerProfile, PlayerRef, Team } from '@/types'
 import { usePlayerProfile } from './usePlayer'
 
 type PlayerTab = 'info' | 'stats' | 'career'
+
+const PLAYER_TABS: readonly PlayerTab[] = ['info', 'stats', 'career']
 
 interface PlayerDetailModalProps {
   playerRef: PlayerRef | null
@@ -55,7 +58,19 @@ function InfoRow({ label, value }: { label: string; value?: string | number }) {
 
 export function PlayerDetailModal({ playerRef, onClose, onOpenTeam }: PlayerDetailModalProps) {
   const [activeTab, setActiveTab] = useState<PlayerTab>('info')
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
   const { data: profile, isPending } = usePlayerProfile(playerRef)
+
+  const { offsetX, isDragging, handlers } = useTabSwipe({
+    tabs: PLAYER_TABS,
+    activeTab,
+    onTabChange: (newTab) => {
+      setActiveTab(newTab)
+      if (scrollContainerRef.current) {
+        scrollContainerRef.current.scrollTop = 0
+      }
+    },
+  })
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -261,8 +276,19 @@ export function PlayerDetailModal({ playerRef, onClose, onOpenTeam }: PlayerDeta
         </div>
 
         {/* Cuerpo del Modal con scroll */}
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 [scrollbar-width:thin] space-y-4">
-          {isPending && !profile && (
+        <div
+          ref={scrollContainerRef}
+          className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-5 py-4 [scrollbar-width:thin]"
+        >
+          <div
+            {...handlers}
+            style={offsetX !== 0 ? { transform: `translateX(${offsetX}px)` } : undefined}
+            className={clsx(
+              'min-h-full touch-pan-y space-y-4',
+              !isDragging && 'transition-transform duration-200 ease-out',
+            )}
+          >
+            {isPending && !profile && (
             <div className="flex items-center justify-center py-8 text-xs text-accent">
               <span className="mr-2 inline-block size-2 animate-ping rounded-full bg-accent" />
               Cargando biografía y estadísticas oficiales...
@@ -531,6 +557,7 @@ export function PlayerDetailModal({ playerRef, onClose, onOpenTeam }: PlayerDeta
               )}
             </div>
           )}
+          </div>
         </div>
       </div>
     </div>

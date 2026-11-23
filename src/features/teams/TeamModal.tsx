@@ -5,6 +5,7 @@ import { FavoriteStar } from '@/features/favorites/FavoriteStar'
 import { useFavoritesStore } from '@/features/favorites/favoritesStore'
 import { hasStandingsTable, useStandings } from '@/features/leagues/useStandings'
 import { MatchCard } from '@/features/matches/components/MatchCard'
+import { useTabSwipe } from '@/hooks/useTabSwipe'
 import { groupMatchesByDateLabel } from '@/lib/groupMatches'
 import { isNationalTeam } from '@/lib/nationalTeams'
 import { findRfefClub } from '@/services/real/rfef'
@@ -19,6 +20,8 @@ const TABS: { id: TeamTab; label: string }[] = [
   { id: 'squad', label: 'Plantilla' },
   { id: 'matches', label: 'Partidos' },
 ]
+
+const TEAM_TAB_IDS: readonly TeamTab[] = ['info', 'standings', 'squad', 'matches']
 
 interface TeamModalProps {
   teamRef: TeamRef | null
@@ -587,6 +590,11 @@ export function TeamModal({
   onOpenLeague,
 }: TeamModalProps) {
   const [tab, setTab] = useState<TeamTab>('info')
+  const { offsetX, isDragging, handlers } = useTabSwipe({
+    tabs: TEAM_TAB_IDS,
+    activeTab: tab,
+    onTabChange: setTab,
+  })
   const isFav = useFavoritesStore((s) => (teamRef ? s.teamIds.includes(teamRef.team.id) : false))
   const toggleTeam = useFavoritesStore((s) => s.toggleTeam)
   const { data: profile, isPending, isError, refetch } = useTeamProfile(teamRef)
@@ -732,76 +740,85 @@ export function TeamModal({
         {/* Contenido */}
         <div
           ref={scrollContainerRef}
-          className="relative min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4 [scrollbar-width:thin]"
+          className="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-3 py-3 sm:px-4 [scrollbar-width:thin]"
         >
-          {tab === 'standings' ? (
-            <TeamStandingsTab
-              team={team}
-              leagueId={standingsLeagueId}
-              groupCode={standingsGroupCode}
-              isProfilePending={isPending}
-              onOpenTeam={onOpenTeam}
-              onOpenLeague={onOpenLeague}
-            />
-          ) : (
-            <>
-              {isPending && (
-                <div className="flex flex-col items-center justify-center py-12 text-center text-xs text-accent">
-                  <span className="mb-3 inline-block size-3 animate-ping rounded-full bg-accent" />
-                  <span>{isNat ? 'Cargando ficha de la selección...' : 'Cargando ficha del club...'}</span>
-                </div>
-              )}
+          <div
+            {...handlers}
+            style={offsetX !== 0 ? { transform: `translateX(${offsetX}px)` } : undefined}
+            className={clsx(
+              'min-h-full touch-pan-y',
+              !isDragging && 'transition-transform duration-200 ease-out',
+            )}
+          >
+            {tab === 'standings' ? (
+              <TeamStandingsTab
+                team={team}
+                leagueId={standingsLeagueId}
+                groupCode={standingsGroupCode}
+                isProfilePending={isPending}
+                onOpenTeam={onOpenTeam}
+                onOpenLeague={onOpenLeague}
+              />
+            ) : (
+              <>
+                {isPending && (
+                  <div className="flex flex-col items-center justify-center py-12 text-center text-xs text-accent">
+                    <span className="mb-3 inline-block size-3 animate-ping rounded-full bg-accent" />
+                    <span>{isNat ? 'Cargando ficha de la selección...' : 'Cargando ficha del club...'}</span>
+                  </div>
+                )}
 
-              {isError && (
-                <div className="rounded-xl border border-danger/40 bg-card p-4 text-center text-xs">
-                  <p className="font-semibold text-danger">
-                    {isNat ? 'No se pudo cargar la ficha de la selección.' : 'No se pudo cargar la ficha del club.'}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => refetch()}
-                    className="mt-3 rounded-lg bg-accent px-3 py-1.5 font-semibold text-canvas cursor-pointer"
-                  >
-                    Reintentar
-                  </button>
-                </div>
-              )}
-
-              {profile && (
-                <>
-                  {tab === 'info' && <InfoTab profile={profile} />}
-                  {tab === 'squad' && (
-                    <SquadTab squad={profile.squad} isNat={isNat} onSelectPlayer={onSelectPlayer} />
-                  )}
-                  {tab === 'matches' && (
-                    <div
-                      className={clsx(
-                        'flex flex-col gap-5',
-                        pastChronological.length > 0 &&
-                          upcomingChronological.length > 0 &&
-                          'pb-[35dvh]',
-                      )}
+                {isError && (
+                  <div className="rounded-xl border border-danger/40 bg-card p-4 text-center text-xs">
+                    <p className="font-semibold text-danger">
+                      {isNat ? 'No se pudo cargar la ficha de la selección.' : 'No se pudo cargar la ficha del club.'}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => refetch()}
+                      className="mt-3 rounded-lg bg-accent px-3 py-1.5 font-semibold text-canvas cursor-pointer"
                     >
-                      <MatchList
-                        title="Partidos anteriores"
-                        matches={pastChronological}
-                        empty="No hay resultados recientes registrados."
-                        onSelect={onSelectMatch}
-                      />
-                      <MatchList
-                        sectionRef={firstUpcomingRef}
-                        title="Próximos partidos"
-                        accent
-                        matches={upcomingChronological}
-                        empty="No hay próximos partidos programados."
-                        onSelect={onSelectMatch}
-                      />
-                    </div>
-                  )}
-                </>
-              )}
-            </>
-          )}
+                      Reintentar
+                    </button>
+                  </div>
+                )}
+
+                {profile && (
+                  <>
+                    {tab === 'info' && <InfoTab profile={profile} />}
+                    {tab === 'squad' && (
+                      <SquadTab squad={profile.squad} isNat={isNat} onSelectPlayer={onSelectPlayer} />
+                    )}
+                    {tab === 'matches' && (
+                      <div
+                        className={clsx(
+                          'flex flex-col gap-5',
+                          pastChronological.length > 0 &&
+                            upcomingChronological.length > 0 &&
+                            'pb-[35dvh]',
+                        )}
+                      >
+                        <MatchList
+                          title="Partidos anteriores"
+                          matches={pastChronological}
+                          empty="No hay resultados recientes registrados."
+                          onSelect={onSelectMatch}
+                        />
+                        <MatchList
+                          sectionRef={firstUpcomingRef}
+                          title="Próximos partidos"
+                          accent
+                          matches={upcomingChronological}
+                          empty="No hay próximos partidos programados."
+                          onSelect={onSelectMatch}
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
+              </>
+            )}
+          </div>
         </div>
       </div>
     </div>

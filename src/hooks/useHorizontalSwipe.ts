@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type TouchEvent } from 'react'
 import { resolveSwipeDirection } from '@/lib/dayViews'
 
-interface UseHorizontalSwipeOptions {
+export interface UseHorizontalSwipeOptions {
   canSwipePrev: boolean
   canSwipeNext: boolean
   onSwipePrev: () => void
@@ -12,6 +12,21 @@ type LockAxis = 'none' | 'horizontal' | 'vertical'
 
 const DEAD_ZONE_PX = 10
 const MAX_OFFSET_PX = 140
+
+function isInsideScrollableX(element: HTMLElement | null, boundary: HTMLElement | null): boolean {
+  let curr = element
+  while (curr && curr !== boundary) {
+    if (curr.scrollWidth > curr.clientWidth + 4) {
+      const style = typeof window !== 'undefined' ? window.getComputedStyle(curr) : null
+      const overflowX = style?.overflowX
+      if (overflowX === 'auto' || overflowX === 'scroll') {
+        return true
+      }
+    }
+    curr = curr.parentElement
+  }
+  return false
+}
 
 /**
  * Detecta deslizamientos horizontales táctiles sobre un contenedor manteniendo intacto
@@ -67,6 +82,17 @@ export function useHorizontalSwipe({
       gestureRef.current.axis = 'none'
       setIsDragging(false)
       setOffsetX(0)
+      return
+    }
+
+    const target = e.target as HTMLElement | null
+    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+      gestureRef.current.active = false
+      return
+    }
+
+    if (isInsideScrollableX(target, e.currentTarget)) {
+      gestureRef.current.active = false
       return
     }
 

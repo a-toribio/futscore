@@ -4,6 +4,7 @@ import { TeamCrest } from '@/components/ui/TeamCrest'
 import { FavoriteStar } from '@/features/favorites/FavoriteStar'
 import { useFavoritesStore } from '@/features/favorites/favoritesStore'
 import { MatchCard } from '@/features/matches/components/MatchCard'
+import { useTabSwipe } from '@/hooks/useTabSwipe'
 import { groupMatchesByDateLabel } from '@/lib/groupMatches'
 import { leagues } from '@/services/leagueCatalog'
 import { getRfefGroups, isRfefLeague } from '@/services/real/rfef'
@@ -53,6 +54,16 @@ export function StandingsModal({
   const [matchTeamQuery, setMatchTeamQuery] = useState('')
 
   const activeTab: LeagueModalTab = canShowTable ? selectedTab : 'matches'
+  const availableTabs: readonly LeagueModalTab[] = useMemo(
+    () => (canShowTable ? ['standings', 'matches'] : ['matches']),
+    [canShowTable],
+  )
+  const { offsetX, isDragging, handlers } = useTabSwipe({
+    tabs: availableTabs,
+    activeTab,
+    onTabChange: setSelectedTab,
+    disabled: !canShowTable,
+  })
   const rfefGroups = openLeagueId && isRfefLeague(openLeagueId) ? getRfefGroups(openLeagueId) : []
   const activeGroupCode =
     rfefGroups.length > 0
@@ -275,9 +286,17 @@ export function StandingsModal({
         {/* Contenido scrollable */}
         <div
           ref={scrollContainerRef}
-          className="relative min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4 [scrollbar-width:thin]"
+          className="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-3 py-3 sm:px-4 [scrollbar-width:thin]"
         >
-          {activeTab === 'standings' && (
+          <div
+            {...handlers}
+            style={offsetX !== 0 ? { transform: `translateX(${offsetX}px)` } : undefined}
+            className={clsx(
+              'min-h-full touch-pan-y',
+              !isDragging && 'transition-transform duration-200 ease-out',
+            )}
+          >
+            {activeTab === 'standings' && (
             <>
               {standingsQuery.isPending && (
                 <div className="flex flex-col items-center justify-center py-12 text-center text-xs text-accent">
@@ -717,6 +736,7 @@ export function StandingsModal({
               )}
             </div>
           )}
+          </div>
         </div>
       </div>
     </div>

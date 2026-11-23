@@ -1,9 +1,10 @@
 import clsx from 'clsx'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { LiveDot } from '@/components/ui/LiveDot'
 import { TeamCrest } from '@/components/ui/TeamCrest'
 import { useMatchDetail } from '@/features/match-detail/hooks/useMatchDetail'
 import { useHeadToHead } from '@/features/match-detail/hooks/useHeadToHead'
+import { useTabSwipe } from '@/hooks/useTabSwipe'
 import { formatKickoff, formatMatchStatus } from '@/lib/format'
 import { leagues } from '@/services/leagueCatalog'
 import type { Match, Player, Team } from '@/types'
@@ -14,6 +15,8 @@ import { MatchLineupsTab } from './MatchLineupsTab'
 import { MatchStatsTab } from './MatchStatsTab'
 
 type DetailTab = 'events' | 'stats' | 'lineups' | 'h2h' | 'info'
+
+const MATCH_DETAIL_TABS: readonly DetailTab[] = ['events', 'stats', 'lineups', 'h2h', 'info']
 
 interface MatchDetailModalProps {
   match: Match | null
@@ -31,8 +34,20 @@ export function MatchDetailModal({
   onOpenPlayer,
 }: MatchDetailModalProps) {
   const [activeTab, setActiveTab] = useState<DetailTab>('events')
+  const contentScrollRef = useRef<HTMLDivElement>(null)
   const { data: detail, isPending, isError } = useMatchDetail(match)
   const { data: h2hData, isPending: isH2hPending } = useHeadToHead(match)
+
+  const { offsetX, isDragging, handlers } = useTabSwipe({
+    tabs: MATCH_DETAIL_TABS,
+    activeTab,
+    onTabChange: (newTab) => {
+      setActiveTab(newTab)
+      if (contentScrollRef.current) {
+        contentScrollRef.current.scrollTop = 0
+      }
+    },
+  })
 
   // Cerrar con la tecla Escape
   useEffect(() => {
@@ -231,68 +246,80 @@ export function MatchDetailModal({
         </div>
 
         {/* Cuerpo del contenido (min-h-0 flex-1 overflow-y-auto garantiza scroll interno limpio) */}
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 [scrollbar-width:thin]">
-          {activeTab === 'h2h' ? (
-            <MatchHeadToHeadTab
-              summary={h2hData}
-              homeTeam={match.homeTeam}
-              awayTeam={match.awayTeam}
-              isPending={isH2hPending}
-            />
-          ) : (
-            <>
-              {isPending && (
-                <div className="flex flex-col items-center justify-center py-12 text-center text-xs text-accent">
-                  <span className="inline-block size-3 animate-ping rounded-full bg-accent mb-3" />
-                  <span>Cargando detalles oficiales del encuentro...</span>
-                </div>
-              )}
+        <div
+          ref={contentScrollRef}
+          className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 py-3 [scrollbar-width:thin]"
+        >
+          <div
+            {...handlers}
+            style={offsetX !== 0 ? { transform: `translateX(${offsetX}px)` } : undefined}
+            className={clsx(
+              'min-h-full touch-pan-y',
+              !isDragging && 'transition-transform duration-200 ease-out',
+            )}
+          >
+            {activeTab === 'h2h' ? (
+              <MatchHeadToHeadTab
+                summary={h2hData}
+                homeTeam={match.homeTeam}
+                awayTeam={match.awayTeam}
+                isPending={isH2hPending}
+              />
+            ) : (
+              <>
+                {isPending && (
+                  <div className="flex flex-col items-center justify-center py-12 text-center text-xs text-accent">
+                    <span className="inline-block size-3 animate-ping rounded-full bg-accent mb-3" />
+                    <span>Cargando detalles oficiales del encuentro...</span>
+                  </div>
+                )}
 
-              {isError && (
-                <div className="rounded-xl border border-danger/40 bg-card p-4 text-center text-xs text-danger">
-                  No se pudieron obtener los detalles del encuentro en este momento.
-                </div>
-              )}
+                {isError && (
+                  <div className="rounded-xl border border-danger/40 bg-card p-4 text-center text-xs text-danger">
+                    No se pudieron obtener los detalles del encuentro en este momento.
+                  </div>
+                )}
 
-              {!isPending && !isError && detail && (
-                <>
-                  {activeTab === 'events' && (
-                    <MatchEventsTab
-                      events={detail.events}
-                      homeTeamName={match.homeTeam.name}
-                      awayTeamName={match.awayTeam.name}
-                      onSelectPlayerName={(name, isHome) =>
-                        onOpenPlayer?.(
-                          { id: '', name, starter: true },
-                          isHome ? match.homeTeam : match.awayTeam,
-                        )
-                      }
-                    />
-                  )}
+                {!isPending && !isError && detail && (
+                  <>
+                    {activeTab === 'events' && (
+                      <MatchEventsTab
+                        events={detail.events}
+                        homeTeamName={match.homeTeam.name}
+                        awayTeamName={match.awayTeam.name}
+                        onSelectPlayerName={(name, isHome) =>
+                          onOpenPlayer?.(
+                            { id: '', name, starter: true },
+                            isHome ? match.homeTeam : match.awayTeam,
+                          )
+                        }
+                      />
+                    )}
 
-                  {activeTab === 'stats' && (
-                    <MatchStatsTab
-                      stats={detail.stats}
-                      homeTeam={match.homeTeam}
-                      awayTeam={match.awayTeam}
-                    />
-                  )}
+                    {activeTab === 'stats' && (
+                      <MatchStatsTab
+                        stats={detail.stats}
+                        homeTeam={match.homeTeam}
+                        awayTeam={match.awayTeam}
+                      />
+                    )}
 
-                  {activeTab === 'lineups' && (
-                    <MatchLineupsTab
-                      home={detail.lineups.home}
-                      away={detail.lineups.away}
-                      onSelectPlayer={(p, team) => onOpenPlayer?.(p, team)}
-                    />
-                  )}
+                    {activeTab === 'lineups' && (
+                      <MatchLineupsTab
+                        home={detail.lineups.home}
+                        away={detail.lineups.away}
+                        onSelectPlayer={(p, team) => onOpenPlayer?.(p, team)}
+                      />
+                    )}
 
-                  {activeTab === 'info' && (
-                    <MatchInfoTab info={detail.info} match={match} league={league} />
-                  )}
-                </>
-              )}
-            </>
-          )}
+                    {activeTab === 'info' && (
+                      <MatchInfoTab info={detail.info} match={match} league={league} />
+                    )}
+                  </>
+                )}
+              </>
+            )}
+          </div>
         </div>
       </div>
     </div>
